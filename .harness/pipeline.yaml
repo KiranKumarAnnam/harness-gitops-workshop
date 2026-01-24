@@ -1,28 +1,27 @@
 kind: pipeline
 name: oc-refresh-poc
 
-steps:
-  - name: build
-    image: maven:3.8-jdk-11
-    commands:
-      - mvn clean install -DskipTests
+clone:
+  disable: true
 
-  - name: publish
-    image: plugins/docker
-    settings:
-      repo: kannam/harness-gitops-workshop
-      tags: latest
-      username:
-        from_secret: dockerhub_username
-      password:
-        from_secret: dockerhub_token
+steps:
+  - name: clone
+    image: alpine/git
+    commands:
+      - git clone http://10.32.12.9:3030/git/gitness_demo/harness-gitops-workshop.git .
+      - git checkout ${DRONE_COMMIT}
 
   - name: deploy
     image: openshift/origin-cli:latest
     commands:
-      - echo "$OC_CONFIG" > kubeconfig
-      - export KUBECONFIG=$(pwd)/kubeconfig
-      - oc apply -f manifests/deployment.yaml -n your-sandbox-namespace
+      - echo "nameserver 10.36.65.10" > /etc/resolv.conf
+      - echo "nameserver 10.32.65.11" >> /etc/resolv.conf
+      - cat /etc/resolv.conf
+      - oc login "$OPENSHIFT_SERVER" --token="$OPENSHIFT_TOKEN" --insecure-skip-tls-verify=true
+      - oc apply -f cli-manifests/ -n gitness-demo
+      - oc get pods -n gitness-demo
     environment:
-      OC_CONFIG:
-        from_secret: oc_config
+      OPENSHIFT_SERVER:
+        from_secret: openshift_server
+      OPENSHIFT_TOKEN:
+        from_secret: openshift_token
