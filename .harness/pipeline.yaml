@@ -1,0 +1,28 @@
+kind: pipeline
+name: oc-refresh-poc
+
+steps:
+  - name: build
+    image: maven:3.8-jdk-11
+    commands:
+      - mvn clean install -DskipTests
+
+  - name: publish
+    image: plugins/docker
+    settings:
+      repo: kannam/harness-gitops-workshop
+      tags: latest
+      username:
+        from_secret: dockerhub_username
+      password:
+        from_secret: dockerhub_token
+
+  - name: deploy
+    image: openshift/origin-cli:latest
+    commands:
+      - echo "$OC_CONFIG" > kubeconfig
+      - export KUBECONFIG=$(pwd)/kubeconfig
+      - oc apply -f manifests/deployment.yaml -n your-sandbox-namespace
+    environment:
+      OC_CONFIG:
+        from_secret: oc_config
