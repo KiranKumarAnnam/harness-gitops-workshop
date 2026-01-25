@@ -79,7 +79,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tagRegex: <+input>
+                            tagRegex: latest
           environment:
             environmentRef: dev_environment
             deployToAll: false
