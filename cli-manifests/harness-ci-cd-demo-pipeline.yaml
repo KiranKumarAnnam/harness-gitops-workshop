@@ -76,14 +76,14 @@ pipeline:
                 spec:
                   artifacts:
                     primary:
-                      primaryArtifactRef: <+input>
+                      primaryArtifactRef: podinfo_docker
                       sources:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
                             connectorRef: docker_hub_connector
-                            imagePath: <+pipeline.variables.dockerRepo>
-                            tag: <+pipeline.sequenceId>
+                            imagePath: kannam/podinfo
+                            tag: latest
           environment:
             environmentRef: dev_environment
             deployToAll: false
