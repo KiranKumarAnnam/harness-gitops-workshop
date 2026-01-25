@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: podinfo
-        image: <+artifacts.primary.image>
+        image: kannam/podinfo:latest
         ports:
         - containerPort: 9898
           name: http
