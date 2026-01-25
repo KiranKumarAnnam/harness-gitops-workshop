@@ -1,0 +1,208 @@
+gitops:
+  name: openshift_gitops_cluster
+  identifier: openshiftgitopscluster
+  projectIdentifier: default_project
+  orgIdentifier: default
+  type: cluster
+  cluster:
+    # OpenShift cluster API server URL
+    # For in-cluster: https://kubernetes.default.svc
+    # For remote: https://api.your-openshift-cluster.example.com:6443
+    server: https://kubernetes.default.svc
+    
+    config:
+      # Use IN_CLUSTER when GitOps agent runs inside OpenShift
+      clusterConnectionType: IN_CLUSTER
+      
+      # For external cluster connection, use DIRECT_KUBERNETES and specify credentials:
+      # clusterConnectionType: DIRECT_KUBERNETES
+      # credentials:
+      #   type: ServiceAccount
+      #   spec:
+      #     serviceAccountTokenRef: openshift_sa_token
+      #     caCertRef: openshift_ca_cert
+    
+    # OpenShift-specific namespaces configuration
+    namespaces:
+      - default
+      - podinfo-dev
+      - podinfo-prod
+    
+    # Labels for organizing clusters
+    labels:
+      environment: onprem
+      platform: openshift
+      region: datacenter
+  
+  # GitOps agent identifier (must be created first)
+  agentIdentifier: openshift_gitops_agent
+
+---
+
+# GitOps Agent Configuration
+gitops:
+  name: openshift_gitops_agent
+  identifier: openshiftgitopsagent
+  projectIdentifier: default_project
+  orgIdentifier: default
+  type: agent
+  agent:
+    metadata:
+      namespace: harness-delegate-ng
+      highAvailability: false
+    
+    # Agent specification
+    spec:
+      # Use the delegate's service account for cluster access
+      serviceAccount: harness-delegate-sa
+      
+      # Agent type
+      type: MANAGED_ARGO_PROVIDER
+      
+      # Scope to specific namespaces or cluster-wide
+      scope: CLUSTER
+
+---
+
+# GitOps Repository Configuration
+gitops:
+  name: openshift_gitops_repo
+  identifier: openshiftgitopsrepo
+  projectIdentifier: default_project
+  orgIdentifier: default
+  type: repository
+  repository:
+    # Repository URL
+    repo: https://github.com/YOUR_GITHUB_USERNAME/harness-gitops-workshop
+    
+    # Repository name
+    name: harness-gitops-workshop
+    
+    # Connection configuration
+    connectionType: HTTPS_ANONYMOUS
+    
+    # For private repositories, use:
+    # connectionType: HTTPS
+    # credentials:
+    #   type: UsernamePassword
+    #   spec:
+    #     username: <+secrets.getValue("github_username")>
+    #     passwordRef: github_pat
+    
+    # Repository type
+    type: GIT
+  
+  agentIdentifier: openshiftgitopsagent
+
+---
+
+# GitOps Application for Dev Environment
+gitops:
+  name: podinfo-dev-app
+  identifier: podinfodevapp
+  projectIdentifier: default_project
+  orgIdentifier: default
+  type: application
+  application:
+    metadata:
+      name: podinfo-dev
+      clusterName: openshift_gitops_cluster
+      labels:
+        harness.io/serviceRef: podinfo_service
+        harness.io/envRef: dev_environment
+        app: podinfo
+        env: dev
+    
+    spec:
+      # Source repository configuration
+      source:
+        repoURL: https://github.com/YOUR_GITHUB_USERNAME/harness-gitops-workshop
+        path: apps/podinfo/kustomize
+        targetRevision: main
+        
+        # Kustomize configuration
+        kustomize:
+          namePrefix: dev-
+          commonLabels:
+            env: dev
+      
+      # Destination cluster configuration
+      destination:
+        # OpenShift cluster
+        server: https://kubernetes.default.svc
+        namespace: podinfo-dev
+      
+      # Sync policy
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+  
+  agentIdentifier: openshiftgitopsagent
+  clusterIdentifier: openshiftgitopscluster
+  repoIdentifier: openshiftgitopsrepo
+
+---
+
+# GitOps Application for Prod Environment
+gitops:
+  name: podinfo-prod-app
+  identifier: podinfoprodapp
+  projectIdentifier: default_project
+  orgIdentifier: default
+  type: application
+  application:
+    metadata:
+      name: podinfo-prod
+      clusterName: openshift_gitops_cluster
+      labels:
+        harness.io/serviceRef: podinfo_service
+        harness.io/envRef: prod_environment
+        app: podinfo
+        env: prod
+    
+    spec:
+      # Source repository configuration
+      source:
+        repoURL: https://github.com/YOUR_GITHUB_USERNAME/harness-gitops-workshop
+        path: apps/podinfo/kustomize
+        targetRevision: main
+        
+        # Kustomize configuration
+        kustomize:
+          namePrefix: prod-
+          commonLabels:
+            env: prod
+          replicas:
+            - name: podinfo
+              count: 3
+      
+      # Destination cluster configuration
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: podinfo-prod
+      
+      # Sync policy - manual for production
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
+  
+  agentIdentifier: openshiftgitopsagent
+  clusterIdentifier: openshiftgitopscluster
+  repoIdentifier: openshiftgitopsrepo

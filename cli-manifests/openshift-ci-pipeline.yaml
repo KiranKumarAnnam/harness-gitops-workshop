@@ -1,0 +1,284 @@
+pipeline:
+  name: openshift-cicd-gitops-pipeline
+  identifier: openshiftcicdgitopspipeline
+  projectIdentifier: default_project
+  orgIdentifier: default
+  tags:
+    platform: openshift
+  properties:
+    ci:
+      codebase:
+        connectorRef: githubconnector
+        build: <+input>
+  stages:
+    - stage:
+        name: build-stage
+        identifier: buildstage
+        description: "Build and scan container image for OpenShift"
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Install Dependencies
+                  identifier: install_dependencies
+                  spec:
+                    shell: Sh
+                    command: |
+                      cd apps/podinfo
+                      go mod download
+                      go mod verify
+              
+              - step:
+                  type: Run
+                  name: Run Unit Tests
+                  identifier: run_unit_tests
+                  spec:
+                    shell: Sh
+                    command: |
+                      cd apps/podinfo
+                      go test -v ./...
+              
+              - step:
+                  type: Owasp
+                  name: OWASP Security Scan
+                  identifier: owasp_scan
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: repository
+                      workspace: apps/podinfo
+                      name: Harness GitOps Workshop
+                      variant: <+codebase.branch>
+                    advanced:
+                      log:
+                        level: info
+                      fail_on_severity: critical
+              
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build and Push to OpenShift Registry
+                  identifier: build_push_openshift
+                  spec:
+                    connectorRef: openshiftregistryconnector
+                    repo: <+pipeline.variables.imageRepo>
+                    tags:
+                      - <+pipeline.variables.imageTag>
+                      - <+pipeline.sequenceId>
+                    dockerfile: apps/podinfo/Dockerfile
+                    context: apps/podinfo
+                    labels:
+                      app: podinfo
+                      version: <+pipeline.variables.imageTag>
+                    buildArgs:
+                      TARGETOS: linux
+                      TARGETARCH: amd64
+    
+    - stage:
+        name: deploy-dev
+        identifier: deploydev
+        description: "Deploy to OpenShift Dev Environment"
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+          environment:
+            environmentRef: dev_environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: openshift_dev_infra
+          execution:
+            steps:
+              - step:
+                  type: K8sRollingDeploy
+                  name: Rolling Deployment
+                  identifier: rolling_deployment
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+              
+              - step:
+                  type: ShellScript
+                  name: Verify Deployment
+                  identifier: verify_deployment
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          # Wait for deployment to be ready
+                          oc rollout status deployment/podinfo -n <+env.name> --timeout=5m
+                          
+                          # Check if pods are running
+                          POD_COUNT=$(oc get pods -n <+env.name> -l app=podinfo --field-selector=status.phase=Running --no-headers | wc -l)
+                          if [ "$POD_COUNT" -lt 1 ]; then
+                            echo "No running pods found"
+                            exit 1
+                          fi
+                          
+                          echo "Deployment verified successfully. Running pods: $POD_COUNT"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 10m
+              
+              - step:
+                  type: Http
+                  name: Health Check
+                  identifier: health_check
+                  spec:
+                    url: http://podinfo.<+env.name>.svc.cluster.local:9898/healthz
+                    method: GET
+                    assertion: <+httpResponseCode> == 200
+                  timeout: 2m
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rollback Deployment
+                  identifier: rollback_deployment
+                  spec:
+                    pruningEnabled: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    
+    - stage:
+        name: deploy-prod
+        identifier: deployprod
+        description: "Deploy to OpenShift Production Environment"
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+          environment:
+            environmentRef: prod_environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: openshift_prod_infra
+          execution:
+            steps:
+              - step:
+                  type: K8sBlueGreenDeploy
+                  name: Blue Green Deployment
+                  identifier: bluegreen_deployment
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+              
+              - step:
+                  type: ShellScript
+                  name: Smoke Tests
+                  identifier: smoke_tests
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          # Run smoke tests against the staging service
+                          STAGING_SVC="podinfo-stage.<+env.name>.svc.cluster.local:9898"
+                          
+                          # Test health endpoint
+                          curl -f http://$STAGING_SVC/healthz || exit 1
+                          
+                          # Test version endpoint
+                          curl -f http://$STAGING_SVC/version || exit 1
+                          
+                          echo "Smoke tests passed"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 5m
+              
+              - step:
+                  type: Approval
+                  name: Manual Approval
+                  identifier: manual_approval
+                  spec:
+                    approvalMessage: Please review and approve production deployment
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      userGroups:
+                        - account._account_all_users
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                  timeout: 1d
+              
+              - step:
+                  type: K8sBGSwapServices
+                  name: Swap Primary Service
+                  identifier: swap_services
+                  spec:
+                    skipDryRun: false
+            rollbackSteps:
+              - step:
+                  type: K8sBGSwapServices
+                  name: Swap Back
+                  identifier: swap_back
+                  spec:
+                    skipDryRun: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.deployToProd> == "true"
+  
+  variables:
+    - name: imageRepo
+      type: String
+      description: "OpenShift image repository"
+      required: true
+      value: podinfo-ns/podinfo
+    - name: imageTag
+      type: String
+      description: "Image tag"
+      required: true
+      value: <+codebase.commitSha>
+    - name: deployToProd
+      type: String
+      description: "Deploy to production?"
+      required: true
+      value: "false"
+  
+  notificationRules:
+    - name: Pipeline Success
+      identifier: pipeline_success
+      pipelineEvents:
+        - type: PipelineSuccess
+      notificationMethod:
+        type: Slack
+        spec:
+          userGroups: []
+          webhookUrl: <+secrets.getValue("slack_webhook")>
+    - name: Pipeline Failed
+      identifier: pipeline_failed
+      pipelineEvents:
+        - type: PipelineFailed
+      notificationMethod:
+        type: Slack
+        spec:
+          userGroups: []
+          webhookUrl: <+secrets.getValue("slack_webhook")>

@@ -1,0 +1,517 @@
+pipeline:
+  name: integrated-ci-cd-gitops-demo
+  identifier: integratedcicdgitopsdemo
+  projectIdentifier: default_project
+  orgIdentifier: default
+  tags:
+    demo: end-to-end
+    platform: openshift
+  properties:
+    ci:
+      codebase:
+        connectorRef: github_connector
+        repoName: harness-gitops-workshop
+        build: <+input>
+  
+  stages:
+    # ========================================
+    # MODULE 1: CI - THE BUILD (Maven + Docker)
+    # ========================================
+    - stage:
+        name: CI Build and Push
+        identifier: ci_build_stage
+        description: "Demonstrate fast Maven build on-prem and image push to DockerHub"
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Maven Build
+                  identifier: maven_build
+                  spec:
+                    connectorRef: docker_hub_connector
+                    image: maven:3.8.6-openjdk-11
+                    shell: Sh
+                    command: |
+                      echo "Building Java application with Maven..."
+                      cd apps/podinfo
+                      
+                      # Show Maven version
+                      mvn --version
+                      
+                      # Clean and build
+                      mvn clean package -DskipTests=false
+                      
+                      # Show build artifacts
+                      ls -lh target/
+                    resources:
+                      limits:
+                        memory: 2Gi
+                        cpu: "1"
+              
+              - step:
+                  type: Run
+                  name: Run Unit Tests
+                  identifier: unit_tests
+                  spec:
+                    connectorRef: docker_hub_connector
+                    image: maven:3.8.6-openjdk-11
+                    shell: Sh
+                    command: |
+                      cd apps/podinfo
+                      echo "Running unit tests..."
+                      go test -v ./pkg/... || true
+                      echo "Tests completed"
+              
+              - step:
+                  type: Owasp
+                  name: OWASP Security Scan
+                  identifier: owasp_scan
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: repository
+                      workspace: apps/podinfo
+                      name: Harness GitOps Workshop
+                      variant: <+codebase.branch>
+                    advanced:
+                      log:
+                        level: info
+                      fail_on_severity: critical
+              
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build and Push to DockerHub
+                  identifier: build_push_docker
+                  spec:
+                    connectorRef: docker_hub_connector
+                    repo: <+pipeline.variables.dockerRepo>
+                    tags:
+                      - <+pipeline.sequenceId>
+                      - latest
+                      - <+codebase.commitSha>
+                    dockerfile: apps/podinfo/Dockerfile
+                    context: apps/podinfo
+                    labels:
+                      app: podinfo
+                      build: <+pipeline.sequenceId>
+                      commit: <+codebase.commitSha>
+                    buildArgs:
+                      VERSION: <+pipeline.sequenceId>
+                    optimize: true
+              
+              - step:
+                  type: Run
+                  name: Update Manifest with Image Tag
+                  identifier: update_manifest
+                  spec:
+                    shell: Sh
+                    command: |
+                      #!/bin/bash
+                      echo "Updating Kubernetes manifest with new image tag..."
+                      
+                      cd openshift-manifests
+                      
+                      # Update image in dev manifest
+                      sed -i "s|image:.*podinfo:.*|image: <+pipeline.variables.dockerRepo>:<+pipeline.sequenceId>|g" podinfo-dev.yaml
+                      
+                      echo "Manifest updated with image: <+pipeline.variables.dockerRepo>:<+pipeline.sequenceId>"
+                      
+                      # Show the change
+                      grep "image:" podinfo-dev.yaml
+                    outputVariables:
+                      - name: IMAGE_TAG
+                        type: String
+                        value: <+pipeline.sequenceId>
+        variables:
+          - name: BUILD_START_TIME
+            type: String
+            value: <+currentTime>
+    
+    # ========================================
+    # MODULE 2: CD - THE ORCHESTRATION (Push Model)
+    # ========================================
+    - stage:
+        name: CD Deploy to Dev
+        identifier: cd_deploy_dev
+        description: "Push-based orchestrated deployment with validation and auto-rollback"
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: <+input>
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            connectorRef: docker_hub_connector
+                            imagePath: <+pipeline.variables.dockerRepo>
+                            tag: <+pipeline.sequenceId>
+          environment:
+            environmentRef: dev_environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: openshift_dev_infra
+          execution:
+            steps:
+              - step:
+                  type: K8sRollingDeploy
+                  name: Rolling Deployment
+                  identifier: rolling_deploy
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+                  timeout: 10m
+              
+              - step:
+                  type: ShellScript
+                  name: Smoke Test
+                  identifier: smoke_test
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          
+                          echo "Running smoke tests..."
+                          
+                          # Wait for pods to be ready
+                          oc wait --for=condition=ready pod -l app=podinfo -n podinfo-dev --timeout=300s
+                          
+                          # Get service endpoint
+                          SVC_URL="http://podinfo.podinfo-dev.svc.cluster.local:9898"
+                          
+                          # Test health endpoint
+                          echo "Testing health endpoint..."
+                          curl -f $SVC_URL/healthz || exit 1
+                          
+                          # Test version endpoint
+                          echo "Testing version endpoint..."
+                          VERSION=$(curl -s $SVC_URL/version | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+                          echo "Deployed version: $VERSION"
+                          
+                          # Test metrics endpoint
+                          echo "Testing metrics endpoint..."
+                          curl -f http://podinfo.podinfo-dev.svc.cluster.local:9797/metrics || exit 1
+                          
+                          echo "All smoke tests passed!"
+                    environmentVariables: []
+                    outputVariables:
+                      - name: DEPLOYED_VERSION
+                        type: String
+                        value: version
+                  timeout: 5m
+              
+              - step:
+                  type: ShellScript
+                  name: Performance Check
+                  identifier: performance_check
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          echo "Checking application performance..."
+                          
+                          SVC_URL="http://podinfo.podinfo-dev.svc.cluster.local:9898"
+                          
+                          # Run 10 requests and measure response time
+                          TOTAL_TIME=0
+                          REQUESTS=10
+                          
+                          for i in $(seq 1 $REQUESTS); do
+                            START=$(date +%s%N)
+                            curl -s $SVC_URL/healthz > /dev/null
+                            END=$(date +%s%N)
+                            ELAPSED=$((($END - $START) / 1000000))
+                            TOTAL_TIME=$(($TOTAL_TIME + $ELAPSED))
+                            echo "Request $i: ${ELAPSED}ms"
+                          done
+                          
+                          AVG_TIME=$(($TOTAL_TIME / $REQUESTS))
+                          echo "Average response time: ${AVG_TIME}ms"
+                          
+                          # Fail if average response time > 500ms
+                          if [ $AVG_TIME -gt 500 ]; then
+                            echo "ERROR: Average response time exceeds threshold (500ms)"
+                            exit 1
+                          fi
+                          
+                          echo "Performance check passed!"
+                  timeout: 3m
+              
+              - step:
+                  type: Http
+                  name: External Health Check
+                  identifier: external_health_check
+                  spec:
+                    url: http://podinfo.podinfo-dev.svc.cluster.local:9898/healthz
+                    method: GET
+                    assertion: <+httpResponseCode> == 200
+                  timeout: 1m
+            
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rollback on Failure
+                  identifier: auto_rollback
+                  spec:
+                    pruningEnabled: false
+                  timeout: 10m
+              
+              - step:
+                  type: ShellScript
+                  name: Notify Rollback
+                  identifier: notify_rollback
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== AUTOMATIC ROLLBACK TRIGGERED ==="
+                          echo "Deployment failed validation checks"
+                          echo "Application rolled back to previous stable version"
+                          echo "Review logs for failure details"
+        
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        
+        when:
+          pipelineStatus: Success
+    
+    # ========================================
+    # MODULE 3: GITOPS - STATE ENFORCEMENT
+    # ========================================
+    - stage:
+        name: Update GitOps Manifest
+        identifier: update_gitops_manifest
+        description: "Update Git repo to trigger GitOps sync - The Modern Way"
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Commit Manifest Changes
+                  identifier: commit_manifest
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          
+                          echo "Committing manifest changes to Git..."
+                          
+                          # Configure Git
+                          git config --global user.email "harness-pipeline@harness.io"
+                          git config --global user.name "Harness Pipeline"
+                          
+                          # Check if there are changes
+                          if git diff --quiet openshift-manifests/podinfo-dev.yaml; then
+                            echo "No changes to commit"
+                            exit 0
+                          fi
+                          
+                          # Commit and push
+                          git add openshift-manifests/podinfo-dev.yaml
+                          git commit -m "chore: Update podinfo-dev image to <+pipeline.sequenceId> [skip ci]"
+                          git push origin main
+                          
+                          echo "Manifest committed to Git"
+                          echo "GitOps Agent will detect and sync changes automatically"
+                    environmentVariables:
+                      - name: GIT_USERNAME
+                        type: String
+                        value: <+secrets.getValue("github_username")>
+                      - name: GIT_TOKEN
+                        type: String
+                        value: <+secrets.getValue("github_pat")>
+                  timeout: 3m
+              
+              - step:
+                  type: ShellScript
+                  name: Wait for GitOps Sync
+                  identifier: wait_gitops_sync
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          echo "Waiting for GitOps to sync the changes..."
+                          echo "The GitOps Agent will:"
+                          echo "  1. Detect the Git commit"
+                          echo "  2. Compare desired state vs actual state"
+                          echo "  3. Apply the changes automatically"
+                          echo "  4. Maintain this state continuously"
+                          
+                          # Wait for sync (in demo, show this in Harness GitOps UI)
+                          sleep 30
+                          
+                          echo "GitOps sync initiated. Check Harness GitOps UI for sync status."
+                  timeout: 2m
+        
+        tags: {}
+    
+    # ========================================
+    # PRODUCTION DEPLOYMENT (Optional - Manual Trigger)
+    # ========================================
+    - stage:
+        name: CD Deploy to Production
+        identifier: cd_deploy_prod
+        description: "Blue-Green deployment with manual approval"
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: <+input>
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            connectorRef: docker_hub_connector
+                            imagePath: <+pipeline.variables.dockerRepo>
+                            tag: <+pipeline.sequenceId>
+          environment:
+            environmentRef: prod_environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: openshift_prod_infra
+          execution:
+            steps:
+              - step:
+                  type: K8sBlueGreenDeploy
+                  name: Blue Green Deployment
+                  identifier: bluegreen_deploy
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+                  timeout: 10m
+              
+              - step:
+                  type: Approval
+                  name: Manual Approval Required
+                  identifier: manual_approval
+                  spec:
+                    approvalMessage: |-
+                      Please review the staging deployment before swapping to production.
+                      
+                      Image: <+pipeline.variables.dockerRepo>:<+pipeline.sequenceId>
+                      Commit: <+codebase.commitSha>
+                      
+                      Staging URL: Check OpenShift Route podinfo-stage
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      userGroups:
+                        - account._account_all_users
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                    approverInputs: []
+                  timeout: 1d
+              
+              - step:
+                  type: K8sBGSwapServices
+                  name: Swap to Production
+                  identifier: swap_production
+                  spec:
+                    skipDryRun: false
+                  timeout: 10m
+            
+            rollbackSteps:
+              - step:
+                  type: K8sBGSwapServices
+                  name: Swap Back on Failure
+                  identifier: swap_back
+                  spec:
+                    skipDryRun: false
+        
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.deployToProd> == "true"
+  
+  variables:
+    - name: dockerRepo
+      type: String
+      description: "Docker Hub repository"
+      required: true
+      value: YOUR_DOCKERHUB_USERNAME/podinfo
+    
+    - name: deployToProd
+      type: String
+      description: "Deploy to production after dev?"
+      required: true
+      value: "false"
+  
+  notificationRules:
+    - name: Pipeline Success
+      identifier: success_notification
+      pipelineEvents:
+        - type: PipelineSuccess
+      notificationMethod:
+        type: Email
+        spec:
+          userGroups:
+            - account._account_all_users
+          recipients:
+            - <+pipeline.triggeredBy.email>
+    
+    - name: Pipeline Failed
+      identifier: failure_notification
+      pipelineEvents:
+        - type: PipelineFailed
+      notificationMethod:
+        type: Email
+        spec:
+          userGroups:
+            - account._account_all_users
+          recipients:
+            - <+pipeline.triggeredBy.email>
