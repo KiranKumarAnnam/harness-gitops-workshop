@@ -28,26 +28,7 @@ pipeline:
             steps:
               - step:
                   type: Run
-                  name: Maven Build
-                  identifier: maven_build
-                  spec:
-                    connectorRef: docker_hub_connector
-                    image: maven:3.8.6-openjdk-11
-                    shell: Sh
-                    command: |
-                      echo "Building with Maven..."
-                      cd apps/podinfo
-                      mvn --version
-                      mvn clean package -DskipTests
-                      ls -lh target/
-                    resources:
-                      limits:
-                        memory: 2Gi
-                        cpu: "1"
-              
-              - step:
-                  type: Run
-                  name: Run Tests
+                  name: Run Go Tests
                   identifier: run_tests
                   spec:
                     connectorRef: docker_hub_connector
@@ -55,6 +36,7 @@ pipeline:
                     shell: Sh
                     command: |
                       cd apps/podinfo
+                      echo "Running Go tests..."
                       go test -v ./pkg/... || echo "Tests completed"
               
               - step:
