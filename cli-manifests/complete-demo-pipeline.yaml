@@ -644,7 +644,7 @@ pipeline:
               # Blue/Green Deployment
               - step:
                   type: K8sBlueGreenDeploy
-                  name: Stage Deployment (Green)
+                  name: Stage_Deployment_Green
                   identifier: bluegreen_stage
                   spec:
                     skipDryRun: false
