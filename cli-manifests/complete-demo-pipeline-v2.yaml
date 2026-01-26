@@ -115,10 +115,16 @@ pipeline:
                               type: Inline
                               spec:
                                 content: |
-                                  securityContext: {}
+                                  securityContext:
+                                    fsGroup: 2
+                                    runAsGroup: 1000
                                   containerSecurityContext:
+                                    allowPrivilegeEscalation: false
                                     runAsNonRoot: true
                                     runAsUser: 1000
+                                    capabilities:
+                                      drop:
+                                        - ALL
                   timeout: 10m
               - step:
                   type: ShellScript
@@ -226,6 +232,25 @@ pipeline:
                   spec:
                     skipDryRun: false
                     pruningEnabled: false
+                    overrides:
+                      - manifest:
+                          identifier: values
+                          type: Values
+                          spec:
+                            store:
+                              type: Inline
+                              spec:
+                                content: |
+                                  securityContext:
+                                    fsGroup: 2
+                                    runAsGroup: 1000
+                                  containerSecurityContext:
+                                    allowPrivilegeEscalation: false
+                                    runAsNonRoot: true
+                                    runAsUser: 1000
+                                    capabilities:
+                                      drop:
+                                        - ALL
                   timeout: 10m
               - step:
                   type: ShellScript
@@ -373,6 +398,25 @@ pipeline:
                       spec:
                         count: 1
                     skipDryRun: false
+                    overrides:
+                      - manifest:
+                          identifier: values
+                          type: Values
+                          spec:
+                            store:
+                              type: Inline
+                              spec:
+                                content: |
+                                  securityContext:
+                                    fsGroup: 2
+                                    runAsGroup: 1000
+                                  containerSecurityContext:
+                                    allowPrivilegeEscalation: false
+                                    runAsNonRoot: true
+                                    runAsUser: 1000
+                                    capabilities:
+                                      drop:
+                                        - ALL
                   timeout: 10m
               - step:
                   type: ShellScript
@@ -426,6 +470,25 @@ pipeline:
                       spec:
                         count: 2
                     skipDryRun: false
+                    overrides:
+                      - manifest:
+                          identifier: values
+                          type: Values
+                          spec:
+                            store:
+                              type: Inline
+                              spec:
+                                content: |
+                                  securityContext:
+                                    fsGroup: 2
+                                    runAsGroup: 1000
+                                  containerSecurityContext:
+                                    allowPrivilegeEscalation: false
+                                    runAsNonRoot: true
+                                    runAsUser: 1000
+                                    capabilities:
+                                      drop:
+                                        - ALL
                   timeout: 10m
               - step:
                   type: ShellScript
