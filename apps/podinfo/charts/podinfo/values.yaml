@@ -98,8 +98,8 @@ serviceAccount:
   # List of image pull secrets if pulling from private registries
   imagePullSecrets: []
 
-# set container security context
-securityContext: {}
+# set container security context (empty to allow pipeline overrides)
+securityContext: null
 
 ingress:
   enabled: false
