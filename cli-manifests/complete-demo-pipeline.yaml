@@ -105,7 +105,9 @@
                             tagRegex: <+input>
           
           environment:
-            environmentRef: qa_environment
+            environmentRef: dev_environment
+            deployToAll: false
+            infrastructureDefinitions:
               - identifier: openshift_dev_infra
           
           execution:
