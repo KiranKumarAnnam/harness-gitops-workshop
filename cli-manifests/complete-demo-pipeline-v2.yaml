@@ -91,7 +91,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           environment:
             environmentRef: dev_environment
             deployToAll: false
@@ -211,7 +211,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           environment:
             environmentRef: QA_Environment
             deployToAll: false
@@ -337,7 +337,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           environment:
             environmentRef: Production_Environment
             deployToAll: false
@@ -557,7 +557,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           environment:
             environmentRef: Production_Environment
             deployToAll: false
