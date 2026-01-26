@@ -106,6 +106,19 @@ pipeline:
                   spec:
                     skipDryRun: false
                     pruningEnabled: false
+                    overrides:
+                      - manifest:
+                          identifier: values
+                          type: Values
+                          spec:
+                            store:
+                              type: Inline
+                              spec:
+                                content: |
+                                  securityContext: {}
+                                  containerSecurityContext:
+                                    runAsNonRoot: true
+                                    runAsUser: 1000
                   timeout: 10m
               - step:
                   type: ShellScript
