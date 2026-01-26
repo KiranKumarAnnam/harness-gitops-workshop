@@ -337,7 +337,7 @@ pipeline:
         
         when:
           pipelineStatus: Success
-          condition: <+stage.deploy_dev.status> == "Success"
+          condition: <+stage.deploy_dev.status> == Success
     
     # ============================================
     # STAGE 4: Deploy to PROD (Manual Approval + Canary)
@@ -746,7 +746,7 @@ pipeline:
         
         when:
           pipelineStatus: Success
-          condition: <+pipeline.variables.deploymentStrategy> == "bluegreen"
+          condition: <+pipeline.variables.deploymentStrategy> == bluegreen
   
   # ============================================
   # Pipeline Variables
