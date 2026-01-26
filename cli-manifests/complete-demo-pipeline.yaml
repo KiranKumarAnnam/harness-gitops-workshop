@@ -102,14 +102,10 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            connectorRef: docker_hub_connector
-                            imagePath: kannam/podinfo
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           
           environment:
-            environmentRef: dev_environment
-            deployToAll: false
-            infrastructureDefinitions:
+            environmentRef: qa_environment
               - identifier: openshift_dev_infra
           
           execution:
@@ -222,9 +218,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            connectorRef: docker_hub_connector
-                            imagePath: kannam/podinfo
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           
           environment:
             environmentRef: qa_environment
@@ -362,9 +356,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            connectorRef: docker_hub_connector
-                            imagePath: kannam/podinfo
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           
           environment:
             environmentRef: prod_environment
@@ -611,9 +603,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            connectorRef: docker_hub_connector
-                            imagePath: kannam/podinfo
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           
           environment:
             environmentRef: prod_environment
@@ -764,9 +754,8 @@ pipeline:
       required: false
       value: canary
       allowedValues:
-        values:
-          - canary
-          - bluegreen
+        - canary
+        - bluegreen
   
   # ============================================
   # Notification Rules
