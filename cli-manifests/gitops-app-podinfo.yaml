@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo-gitops
+  namespace: gitness-demo
+  labels:
+    app: podinfo
+    env: dev
+    managed-by: harness
+  annotations:
+    harness.io/description: "Podinfo GitOps application for drift detection"
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/KiranKumarAnnam/harness-gitops-workshop
+    targetRevision: main
+    path: k8s-manifests
+    helm:
+      valueFiles:
+        - values-dev.yaml
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: podinfo-dev
+  
+  syncPolicy:
+    automated:
+      prune: true      # Auto-delete resources not in Git
+      selfHeal: true   # Auto-sync when drift detected
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  
+  # Health checks
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas

@@ -1,8 +1,24 @@
 environment:
-  name: prod
-  identifier: prod
-  tags: {}
+  name: Production Environment
+  identifier: prod_environment
+  description: Production environment with enhanced monitoring
+  tags:
+    env: production
+    type: production
+    criticality: high
   type: Production
   orgIdentifier: default
   projectIdentifier: default_project
-  variables: []
+  variables:
+    - name: namespace
+      type: String
+      value: podinfo-prod
+      description: Kubernetes namespace for Production
+    - name: replicas
+      type: String
+      value: "4"
+      description: Number of replicas for Production
+    - name: require_approval
+      type: String
+      value: "true"
+      description: Require manual approval for deployments

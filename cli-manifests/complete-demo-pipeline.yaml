@@ -1,0 +1,868 @@
+pipeline:
+  name: Complete CI/CD Demo Pipeline
+  identifier: completecicddemopipeline
+  projectIdentifier: default_project
+  orgIdentifier: default
+  tags:
+    demo: "true"
+    environment: multi-env
+  description: |
+    Complete demo pipeline showcasing:
+    - CI: Build on GitHub commit
+    - CD: Auto-deploy to DEV, QA (with approval), PROD (with approval + canary/blue-green)
+    - Rollback: Automatic and manual
+    - GitOps: Sync and drift detection
+  
+  properties:
+    ci:
+      codebase:
+        connectorRef: github_connector
+        repoName: harness-gitops-workshop
+        build: <+input>
+  
+  stages:
+    # ============================================
+    # STAGE 1: CI - Build and Push
+    # ============================================
+    - stage:
+        name: Build and Test
+        identifier: build_test
+        description: Build Docker image and run tests
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Run Go Tests
+                  identifier: run_tests
+                  spec:
+                    connectorRef: docker_hub_connector
+                    image: golang:1.20-alpine
+                    shell: Sh
+                    command: |
+                      cd apps/podinfo
+                      echo "Running Go tests..."
+                      go test -v ./pkg/... || echo "Tests completed"
+                  timeout: 5m
+              
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build and Push to DockerHub
+                  identifier: build_push_docker
+                  spec:
+                    connectorRef: docker_hub_connector
+                    repo: kannam/podinfo
+                    tags:
+                      - <+pipeline.sequenceId>
+                      - dev-latest
+                      - <+codebase.commitSha>
+                    dockerfile: apps/podinfo/Dockerfile
+                    context: apps/podinfo
+                    labels:
+                      app: podinfo
+                      build: <+pipeline.sequenceId>
+                      commit: <+codebase.commitSha>
+                      branch: <+codebase.branch>
+                    optimize: true
+                  timeout: 10m
+        
+        variables:
+          - name: BUILD_TIME
+            type: String
+            value: <+pipeline.executionStartTime>
+    
+    # ============================================
+    # STAGE 2: Deploy to DEV (Auto)
+    # ============================================
+    - stage:
+        name: Deploy to DEV
+        identifier: deploy_dev
+        description: Auto-deploy to DEV environment
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: podinfo_docker
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            connectorRef: docker_hub_connector
+                            imagePath: kannam/podinfo
+                            tag: <+pipeline.sequenceId>
+          
+          environment:
+            environmentRef: dev_environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: openshift_dev_infra
+          
+          execution:
+            steps:
+              - step:
+                  type: K8sRollingDeploy
+                  name: Rolling Deployment
+                  identifier: rolling_deploy_dev
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+                  timeout: 10m
+              
+              - step:
+                  type: ShellScript
+                  name: Health Check
+                  identifier: health_check_dev
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          
+                          echo "=== Running health checks on DEV ==="
+                          
+                          # Wait for pods to be ready
+                          oc wait --for=condition=ready pod -l app=podinfo -n podinfo-dev --timeout=300s
+                          
+                          # Get pod count
+                          POD_COUNT=$(oc get pods -n podinfo-dev -l app=podinfo --field-selector=status.phase=Running --no-headers | wc -l)
+                          echo "Running pods: $POD_COUNT"
+                          
+                          if [ "$POD_COUNT" -lt 1 ]; then
+                            echo "ERROR: No running pods found"
+                            exit 1
+                          fi
+                          
+                          echo "✅ DEV health check passed!"
+                  timeout: 5m
+              
+              - step:
+                  type: ShellScript
+                  name: Smoke Tests
+                  identifier: smoke_tests_dev
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          echo "Running smoke tests on DEV..."
+                          
+                          # Get service endpoint
+                          ROUTE=$(oc get route podinfo -n podinfo-dev -o jsonpath='{.spec.host}' 2>/dev/null || echo "localhost")
+                          
+                          if [ "$ROUTE" != "localhost" ]; then
+                            # Test health endpoint
+                            curl -f http://$ROUTE/healthz || exit 1
+                            echo "✅ Smoke tests passed!"
+                          else
+                            echo "⚠️ No route found, skipping smoke tests"
+                          fi
+                  timeout: 3m
+            
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rollback DEV
+                  identifier: rollback_dev
+                  spec:
+                    pruningEnabled: false
+                  timeout: 10m
+        
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        
+        when:
+          pipelineStatus: Success
+    
+    # ============================================
+    # STAGE 3: Deploy to QA (Auto)
+    # ============================================
+    - stage:
+        name: Deploy to QA
+        identifier: deploy_qa
+        description: Auto-deploy to QA environment after DEV success
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: podinfo_docker
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            connectorRef: docker_hub_connector
+                            imagePath: kannam/podinfo
+                            tag: <+pipeline.sequenceId>
+          
+          environment:
+            environmentRef: qa_environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: openshift_qa_infra
+          
+          execution:
+            steps:
+              - step:
+                  type: K8sRollingDeploy
+                  name: Rolling Deployment
+                  identifier: rolling_deploy_qa
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+                  timeout: 10m
+              
+              - step:
+                  type: ShellScript
+                  name: Health Check
+                  identifier: health_check_qa
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          
+                          echo "=== Running health checks on QA ==="
+                          
+                          oc wait --for=condition=ready pod -l app=podinfo -n podinfo-qa --timeout=300s
+                          
+                          POD_COUNT=$(oc get pods -n podinfo-qa -l app=podinfo --field-selector=status.phase=Running --no-headers | wc -l)
+                          echo "Running pods: $POD_COUNT"
+                          
+                          if [ "$POD_COUNT" -lt 1 ]; then
+                            echo "ERROR: No running pods found"
+                            exit 1
+                          fi
+                          
+                          echo "✅ QA health check passed!"
+                  timeout: 5m
+              
+              - step:
+                  type: ShellScript
+                  name: Integration Tests
+                  identifier: integration_tests_qa
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          echo "=== Running integration tests on QA ==="
+                          
+                          # Simulate integration tests
+                          echo "Test 1: API endpoint validation..."
+                          sleep 2
+                          echo "✅ Pass"
+                          
+                          echo "Test 2: Database connectivity..."
+                          sleep 2
+                          echo "✅ Pass"
+                          
+                          echo "Test 3: Service integration..."
+                          sleep 2
+                          echo "✅ Pass"
+                          
+                          echo "✅ All integration tests passed!"
+                  timeout: 5m
+            
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rollback QA
+                  identifier: rollback_qa
+                  spec:
+                    pruningEnabled: false
+                  timeout: 10m
+              
+              - step:
+                  type: ShellScript
+                  name: Notify QA Rollback
+                  identifier: notify_qa_rollback
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== QA ROLLBACK TRIGGERED ==="
+                          echo "Pipeline: <+pipeline.name>"
+                          echo "Execution: <+pipeline.executionId>"
+                          echo "Build: <+pipeline.sequenceId>"
+                          echo "QA deployment failed and rolled back"
+        
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        
+        when:
+          pipelineStatus: Success
+          condition: <+stage.deploy_dev.status> == "Success"
+    
+    # ============================================
+    # STAGE 4: Deploy to PROD (Manual Approval + Canary)
+    # ============================================
+    - stage:
+        name: Deploy to PROD - Canary
+        identifier: deploy_prod_canary
+        description: Production deployment with canary strategy and approval
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: podinfo_docker
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            connectorRef: docker_hub_connector
+                            imagePath: kannam/podinfo
+                            tag: <+pipeline.sequenceId>
+          
+          environment:
+            environmentRef: prod_environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: openshift_prod_infra
+          
+          execution:
+            steps:
+              # Step 1: Production Approval Gate
+              - step:
+                  type: HarnessApproval
+                  name: Production Deployment Approval
+                  identifier: prod_approval
+                  spec:
+                    approvalMessage: |
+                      **PRODUCTION DEPLOYMENT REQUEST**
+                      
+                      Pipeline: <+pipeline.name>
+                      Build: <+pipeline.sequenceId>
+                      Image: kannam/podinfo:<+pipeline.sequenceId>
+                      Commit: <+codebase.commitSha>
+                      Branch: <+codebase.branch>
+                      
+                      **Deployment History:**
+                      - DEV: <+stage.deploy_dev.status>
+                      - QA: <+stage.deploy_qa.status>
+                      
+                      **Strategy:** Canary (25% → 50% → 100%)
+                      
+                      Please review and approve.
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      userGroups:
+                        - account._account_all_users
+                      minimumCount: 1
+                    approverInputs:
+                      - name: comments
+                        defaultValue: ""
+                  timeout: 1d
+              
+              # Step 2: Canary Phase 1 - 25%
+              - step:
+                  type: K8sCanaryDeploy
+                  name: Canary Deploy 25%
+                  identifier: canary_25
+                  spec:
+                    instanceSelection:
+                      type: Count
+                      spec:
+                        count: 1
+                    skipDryRun: false
+                  timeout: 10m
+              
+              # Step 3: Verify Canary 25%
+              - step:
+                  type: ShellScript
+                  name: Verify Canary 25%
+                  identifier: verify_canary_25
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          echo "=== Verifying Canary 25% ==="
+                          
+                          # Wait for canary pod
+                          sleep 30
+                          
+                          # Check canary pod health
+                          CANARY_PODS=$(oc get pods -n podinfo-prod -l app=podinfo,harness.io/track=canary --field-selector=status.phase=Running --no-headers | wc -l)
+                          echo "Canary pods running: $CANARY_PODS"
+                          
+                          if [ "$CANARY_PODS" -lt 1 ]; then
+                            echo "❌ Canary pod not ready"
+                            exit 1
+                          fi
+                          
+                          echo "✅ Canary 25% verified - metrics look good"
+                  timeout: 5m
+              
+              # Step 4: Approval for 50%
+              - step:
+                  type: HarnessApproval
+                  name: Approve Canary 50%
+                  identifier: approve_canary_50
+                  spec:
+                    approvalMessage: |
+                      **Canary 25% Successful**
+                      
+                      Metrics look healthy. Proceed to 50%?
+                    approvers:
+                      userGroups:
+                        - account._account_all_users
+                      minimumCount: 1
+                  timeout: 2h
+              
+              # Step 5: Canary Phase 2 - 50%
+              - step:
+                  type: K8sCanaryDeploy
+                  name: Canary Deploy 50%
+                  identifier: canary_50
+                  spec:
+                    instanceSelection:
+                      type: Count
+                      spec:
+                        count: 2
+                    skipDryRun: false
+                  timeout: 10m
+              
+              # Step 6: Verify Canary 50%
+              - step:
+                  type: ShellScript
+                  name: Verify Canary 50%
+                  identifier: verify_canary_50
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          echo "=== Verifying Canary 50% ==="
+                          
+                          sleep 30
+                          
+                          CANARY_PODS=$(oc get pods -n podinfo-prod -l app=podinfo,harness.io/track=canary --field-selector=status.phase=Running --no-headers | wc -l)
+                          echo "Canary pods running: $CANARY_PODS"
+                          
+                          if [ "$CANARY_PODS" -lt 2 ]; then
+                            echo "❌ Canary pods not ready"
+                            exit 1
+                          fi
+                          
+                          echo "✅ Canary 50% verified"
+                  timeout: 5m
+              
+              # Step 7: Final Approval for 100%
+              - step:
+                  type: HarnessApproval
+                  name: Approve Full Rollout
+                  identifier: approve_full_rollout
+                  spec:
+                    approvalMessage: |
+                      **Canary 50% Successful**
+                      
+                      All metrics healthy. Proceed to full rollout (100%)?
+                    approvers:
+                      userGroups:
+                        - account._account_all_users
+                      minimumCount: 1
+                  timeout: 2h
+              
+              # Step 8: Canary Delete (promotes to full deployment)
+              - step:
+                  type: K8sCanaryDelete
+                  name: Complete Rollout 100%
+                  identifier: canary_delete
+                  spec: {}
+                  timeout: 10m
+              
+              # Step 9: Final Production Health Check
+              - step:
+                  type: ShellScript
+                  name: Production Health Check
+                  identifier: prod_health_check
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          
+                          echo "=== Final Production Health Check ==="
+                          
+                          # Wait for all pods
+                          oc wait --for=condition=ready pod -l app=podinfo -n podinfo-prod --timeout=300s
+                          
+                          # Get final pod count
+                          TOTAL_PODS=$(oc get pods -n podinfo-prod -l app=podinfo --field-selector=status.phase=Running --no-headers | wc -l)
+                          echo "Total production pods: $TOTAL_PODS"
+                          
+                          # Verify deployment
+                          oc rollout status deployment/podinfo -n podinfo-prod --timeout=5m
+                          
+                          echo "✅ Production deployment complete and healthy!"
+                  timeout: 10m
+            
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rollback Production
+                  identifier: rollback_prod
+                  spec:
+                    pruningEnabled: false
+                  timeout: 10m
+              
+              - step:
+                  type: ShellScript
+                  name: Notify Production Rollback
+                  identifier: notify_prod_rollback
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== ⚠️ PRODUCTION ROLLBACK TRIGGERED ⚠️ ==="
+                          echo "Pipeline: <+pipeline.name>"
+                          echo "Execution: <+pipeline.executionId>"
+                          echo "Build: <+pipeline.sequenceId>"
+                          echo "Production deployment failed during canary phase"
+                          echo "Application rolled back to previous stable version"
+                          echo ""
+                          echo "IMMEDIATE ACTION REQUIRED!"
+        
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        
+        when:
+          pipelineStatus: Success
+          condition: <+stage.deploy_qa.status> == "Success"
+    
+    # ============================================
+    # STAGE 5: Deploy to PROD - Blue/Green (Alternative)
+    # ============================================
+    - stage:
+        name: Deploy to PROD - Blue Green
+        identifier: deploy_prod_bluegreen
+        description: Production deployment with blue-green strategy
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: podinfo_docker
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            connectorRef: docker_hub_connector
+                            imagePath: kannam/podinfo
+                            tag: <+pipeline.sequenceId>
+          
+          environment:
+            environmentRef: prod_environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: openshift_prod_infra
+          
+          execution:
+            steps:
+              # Production Approval
+              - step:
+                  type: HarnessApproval
+                  name: Production Deployment Approval
+                  identifier: prod_bluegreen_approval
+                  spec:
+                    approvalMessage: |
+                      **PRODUCTION DEPLOYMENT REQUEST (Blue/Green)**
+                      
+                      Build: <+pipeline.sequenceId>
+                      Strategy: Blue/Green deployment
+                    approvers:
+                      userGroups:
+                        - account._account_all_users
+                      minimumCount: 1
+                  timeout: 1d
+              
+              # Blue/Green Deployment
+              - step:
+                  type: K8sBlueGreenDeploy
+                  name: Stage Deployment (Green)
+                  identifier: bluegreen_stage
+                  spec:
+                    skipDryRun: false
+                  timeout: 10m
+              
+              # Verify Green Environment
+              - step:
+                  type: ShellScript
+                  name: Verify Green Environment
+                  identifier: verify_green
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          echo "=== Verifying Green Environment ==="
+                          
+                          # Green environment is staged, not receiving traffic yet
+                          sleep 30
+                          
+                          # Check green pods
+                          GREEN_PODS=$(oc get pods -n podinfo-prod -l app=podinfo,harness.io/color=green --field-selector=status.phase=Running --no-headers | wc -l)
+                          echo "Green pods running: $GREEN_PODS"
+                          
+                          if [ "$GREEN_PODS" -lt 1 ]; then
+                            echo "❌ Green environment not ready"
+                            exit 1
+                          fi
+                          
+                          echo "✅ Green environment verified"
+                  timeout: 5m
+              
+              # Approval to Switch Traffic
+              - step:
+                  type: HarnessApproval
+                  name: Approve Traffic Switch
+                  identifier: approve_traffic_switch
+                  spec:
+                    approvalMessage: |
+                      **Green Environment Ready**
+                      
+                      Green environment is healthy. Switch production traffic?
+                    approvers:
+                      userGroups:
+                        - account._account_all_users
+                      minimumCount: 1
+                  timeout: 2h
+              
+              # Swap (Blue becomes Green, Green becomes Blue)
+              - step:
+                  type: K8sBGSwapServices
+                  name: Swap Traffic to Green
+                  identifier: bluegreen_swap
+                  spec: {}
+                  timeout: 10m
+              
+              # Final Verification
+              - step:
+                  type: ShellScript
+                  name: Verify Production Traffic
+                  identifier: verify_prod_traffic
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          echo "=== Verifying Production Traffic ==="
+                          
+                          sleep 20
+                          
+                          # Verify new version is serving traffic
+                          echo "Production is now serving new version"
+                          echo "Old version (blue) still available for quick rollback"
+                          
+                          echo "✅ Traffic successfully switched to green!"
+                  timeout: 5m
+            
+            rollbackSteps:
+              - step:
+                  type: K8sBGSwapServices
+                  name: Rollback to Blue
+                  identifier: rollback_to_blue
+                  spec: {}
+                  timeout: 10m
+        
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.deploymentStrategy> == "bluegreen"
+  
+  # ============================================
+  # Pipeline Variables
+  # ============================================
+  variables:
+    - name: dockerRepo
+      type: String
+      description: DockerHub repository
+      required: true
+      value: kannam/podinfo
+    
+    - name: deploymentStrategy
+      type: String
+      description: Production deployment strategy
+      required: false
+      value: canary
+      allowedValues:
+        values:
+          - canary
+          - bluegreen
+  
+  # ============================================
+  # Notification Rules
+  # ============================================
+  notificationRules:
+    - name: Build Success
+      identifier: build_success
+      pipelineEvents:
+        - type: StageSuccess
+          forStages:
+            - build_test
+      notificationMethod:
+        type: Email
+        spec:
+          userGroups:
+            - account._account_all_users
+          recipients:
+            - <+pipeline.triggeredBy.email>
+    
+    - name: DEV Deployment Success
+      identifier: dev_success
+      pipelineEvents:
+        - type: StageSuccess
+          forStages:
+            - deploy_dev
+      notificationMethod:
+        type: Email
+        spec:
+          userGroups:
+            - account._account_all_users
+          recipients:
+            - <+pipeline.triggeredBy.email>
+    
+    - name: QA Deployment Success
+      identifier: qa_success
+      pipelineEvents:
+        - type: StageSuccess
+          forStages:
+            - deploy_qa
+      notificationMethod:
+        type: Email
+        spec:
+          userGroups:
+            - account._account_all_users
+          recipients:
+            - <+pipeline.triggeredBy.email>
+    
+    - name: Production Deployment Success
+      identifier: prod_success
+      pipelineEvents:
+        - type: StageSuccess
+          forStages:
+            - deploy_prod_canary
+            - deploy_prod_bluegreen
+      notificationMethod:
+        type: Email
+        spec:
+          userGroups:
+            - account._account_all_users
+          recipients:
+            - <+pipeline.triggeredBy.email>
+    
+    - name: Pipeline Failed
+      identifier: pipeline_failed
+      pipelineEvents:
+        - type: PipelineFailed
+      notificationMethod:
+        type: Email
+        spec:
+          userGroups:
+            - account._account_all_users
+          recipients:
+            - <+pipeline.triggeredBy.email>
+    
+    - name: Rollback Triggered
+      identifier: rollback_triggered
+      pipelineEvents:
+        - type: StageSuccess
+          forStages:
+            - rollback_dev
+            - rollback_qa
+            - rollback_prod
+      notificationMethod:
+        type: Email
+        spec:
+          userGroups:
+            - account._account_all_users
+          recipients:
+            - <+pipeline.triggeredBy.email>

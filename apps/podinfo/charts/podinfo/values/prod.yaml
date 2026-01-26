@@ -1,0 +1,63 @@
+# Environment-specific values for QA
+replicaCount: 3
+logLevel: info
+
+image:
+  repository: kannam/podinfo
+  tag: latest  # Will be overridden by pipeline
+  pullPolicy: Always
+
+ui:
+  color: "#ffa726"  # Orange for QA
+  message: "QA Environment"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 384Mi
+
+service:
+  enabled: true
+  type: ClusterIP
+  httpPort: 9898
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  hosts:
+    - host: podinfo-qa.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+# OpenShift Route
+route:
+  enabled: true
+  host: ""
+
+autoscaling:
+  enabled: false
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+# Additional QA-specific configs
+podAnnotations:
+  environment: "qa"
+  test-suite: "integration-tests"

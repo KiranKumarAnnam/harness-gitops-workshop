@@ -1,0 +1,94 @@
+# Environment-specific values for PRODUCTION
+replicaCount: 4
+logLevel: info
+
+image:
+  repository: kannam/podinfo
+  tag: latest  # Will be overridden by pipeline
+  pullPolicy: Always
+
+ui:
+  color: "#66bb6a"  # Green for Production
+  message: "Production Environment"
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+service:
+  enabled: true
+  type: ClusterIP
+  httpPort: 9898
+
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    # Production-specific annotations
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: podinfo.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: podinfo-tls
+      hosts:
+        - podinfo.example.com
+
+# OpenShift Route
+route:
+  enabled: true
+  host: ""
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+# Enable autoscaling in production
+autoscaling:
+  enabled: true
+  minReplicas: 4
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Stricter health checks for production
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+# Production-specific configs
+podAnnotations:
+  environment: "production"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9797"
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 2000

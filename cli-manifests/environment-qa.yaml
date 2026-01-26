@@ -1,0 +1,19 @@
+environment:
+  name: QA Environment
+  identifier: qa_environment
+  description: QA testing environment
+  tags:
+    env: qa
+    type: non-production
+  type: PreProduction
+  orgIdentifier: default
+  projectIdentifier: default_project
+  variables:
+    - name: namespace
+      type: String
+      value: podinfo-qa
+      description: Kubernetes namespace for QA
+    - name: replicas
+      type: String
+      value: "3"
+      description: Number of replicas for QA

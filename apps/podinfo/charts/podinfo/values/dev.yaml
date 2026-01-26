@@ -1,0 +1,58 @@
+# Environment-specific values for DEV
+replicaCount: 2
+logLevel: debug
+
+image:
+  repository: kannam/podinfo
+  tag: latest  # Will be overridden by pipeline
+  pullPolicy: Always
+
+ui:
+  color: "#1e88e5"  # Blue for DEV
+  message: "DEV Environment"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+service:
+  enabled: true
+  type: ClusterIP
+  httpPort: 9898
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  hosts:
+    - host: podinfo-dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+# OpenShift Route (if needed instead of Ingress)
+route:
+  enabled: true
+  host: ""
+
+autoscaling:
+  enabled: false
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5

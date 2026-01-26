@@ -1,0 +1,16 @@
+infrastructureDefinition:
+  name: OpenShift QA Infrastructure
+  identifier: openshift_qa_infra
+  description: OpenShift on-prem cluster QA namespace
+  tags:
+    cloud: openshift
+    env: qa
+  orgIdentifier: default
+  projectIdentifier: default_project
+  environmentRef: qa_environment
+  deploymentType: Kubernetes
+  type: KubernetesDirect
+  spec:
+    connectorRef: account.harnessImage
+    namespace: podinfo-qa
+    releaseName: release-<+INFRA_KEY_SHORT_ID>
