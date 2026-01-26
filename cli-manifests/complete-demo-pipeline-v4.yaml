@@ -91,9 +91,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            connectorRef: docker_hub_connector
-                            imagePath: kannam/podinfo
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           environment:
             environmentRef: dev_environment
             deployToAll: false
@@ -219,9 +217,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            connectorRef: docker_hub_connector
-                            imagePath: kannam/podinfo
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           environment:
             environmentRef: QA_Environment
             deployToAll: false
@@ -366,9 +362,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            connectorRef: docker_hub_connector
-                            imagePath: kannam/podinfo
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           environment:
             environmentRef: Production_Environment
             deployToAll: false
@@ -626,9 +620,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            connectorRef: docker_hub_connector
-                            imagePath: kannam/podinfo
-                            tag: <+pipeline.sequenceId>
+                            tagRegex: <+input>
           environment:
             environmentRef: Production_Environment
             deployToAll: false
