@@ -102,7 +102,7 @@
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tagRegex: <+input>
+                            tag: <+pipeline.sequenceId>
           
           environment:
             environmentRef: dev_environment
@@ -220,7 +220,7 @@
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tagRegex: <+input>
+                            tag: <+pipeline.sequenceId>
           
           environment:
             environmentRef: QA_Environment
@@ -358,7 +358,7 @@
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tagRegex: <+input>
+                            tag: <+pipeline.sequenceId>
           
           environment:
             environmentRef: Production_Environment
@@ -605,7 +605,7 @@
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tagRegex: <+input>
+                            tag: <+pipeline.sequenceId>
           
           environment:
             environmentRef: Production_Environment
