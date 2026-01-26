@@ -586,7 +586,7 @@ pipeline:
         
         when:
           pipelineStatus: Success
-          condition: <+stage.deploy_qa.status> == "Success"
+          condition: <+stage.deploy_qa.status> == Success
     
     # ============================================
     # STAGE 5: Deploy to PROD - Blue/Green (Alternative)
