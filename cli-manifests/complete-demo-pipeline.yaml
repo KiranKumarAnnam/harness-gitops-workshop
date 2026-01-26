@@ -223,10 +223,10 @@
                             tagRegex: <+input>
           
           environment:
-            environmentRef: qa_environment
+            environmentRef: QA_Environment
             deployToAll: false
             infrastructureDefinitions:
-              - identifier: openshift_qa_infra
+              - identifier: OpenShift_QA_Infrastructure
           
           execution:
             steps:
@@ -361,10 +361,10 @@
                             tagRegex: <+input>
           
           environment:
-            environmentRef: prod_environment
+            environmentRef: Production_Environment
             deployToAll: false
             infrastructureDefinitions:
-              - identifier: openshift_prod_infra
+              - identifier: OpenShift_Production_Infrastructure
           
           execution:
             steps:
@@ -608,10 +608,10 @@
                             tagRegex: <+input>
           
           environment:
-            environmentRef: prod_environment
+            environmentRef: Production_Environment
             deployToAll: false
             infrastructureDefinitions:
-              - identifier: openshift_prod_infra
+              - identifier: OpenShift_Production_Infrastructure
           
           execution:
             steps:
