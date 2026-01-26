@@ -1,5 +1,5 @@
 pipeline:
-  name: Complete CI/CD Demo Pipeline
+  name: Complete_CICD_Demo_Pipeline
   identifier: completecicddemopipeline
   projectIdentifier: default_project
   orgIdentifier: default
@@ -25,7 +25,7 @@ pipeline:
     # STAGE 1: CI - Build and Push
     # ============================================
     - stage:
-        name: Build and Test
+        name: Build_and_Test
         identifier: build_test
         description: Build Docker image and run tests
         type: CI
@@ -83,7 +83,7 @@ pipeline:
     # STAGE 2: Deploy to DEV (Auto)
     # ============================================
     - stage:
-        name: Deploy to DEV
+        name: Deploy_to_DEV
         identifier: deploy_dev
         description: Auto-deploy to DEV environment
         type: Deployment
@@ -203,7 +203,7 @@ pipeline:
     # STAGE 3: Deploy to QA (Auto)
     # ============================================
     - stage:
-        name: Deploy to QA
+        name: Deploy_to_QA
         identifier: deploy_qa
         description: Auto-deploy to QA environment after DEV success
         type: Deployment
@@ -343,7 +343,7 @@ pipeline:
     # STAGE 4: Deploy to PROD (Manual Approval + Canary)
     # ============================================
     - stage:
-        name: Deploy to PROD - Canary
+        name: Deploy_to_PROD_Canary
         identifier: deploy_prod_canary
         description: Production deployment with canary strategy and approval
         type: Deployment
@@ -377,39 +377,27 @@ pipeline:
               # Step 1: Production Approval Gate
               - step:
                   type: HarnessApproval
-                  name: Production Deployment Approval
+                  name: Production_Deployment_Approval
                   identifier: prod_approval
                   spec:
                     approvalMessage: |
-                      **PRODUCTION DEPLOYMENT REQUEST**
-                      
+                      PRODUCTION DEPLOYMENT REQUEST
                       Pipeline: <+pipeline.name>
                       Build: <+pipeline.sequenceId>
                       Image: kannam/podinfo:<+pipeline.sequenceId>
-                      Commit: <+codebase.commitSha>
-                      Branch: <+codebase.branch>
-                      
-                      **Deployment History:**
-                      - DEV: <+stage.deploy_dev.status>
-                      - QA: <+stage.deploy_qa.status>
-                      
-                      **Strategy:** Canary (25% → 50% → 100%)
-                      
                       Please review and approve.
                     includePipelineExecutionHistory: true
                     approvers:
                       userGroups:
                         - account._account_all_users
                       minimumCount: 1
-                    approverInputs:
-                      - name: comments
-                        defaultValue: ""
+                      disallowPipelineExecutor: false
                   timeout: 1d
               
               # Step 2: Canary Phase 1 - 25%
               - step:
                   type: K8sCanaryDeploy
-                  name: Canary Deploy 25%
+                  name: Canary_Deploy_25pct
                   identifier: canary_25
                   spec:
                     instanceSelection:
@@ -422,7 +410,7 @@ pipeline:
               # Step 3: Verify Canary 25%
               - step:
                   type: ShellScript
-                  name: Verify Canary 25%
+                  name: Verify_Canary_25pct
                   identifier: verify_canary_25
                   spec:
                     shell: Bash
@@ -452,23 +440,23 @@ pipeline:
               # Step 4: Approval for 50%
               - step:
                   type: HarnessApproval
-                  name: Approve Canary 50%
+                  name: Approve_Canary_50pct
                   identifier: approve_canary_50
                   spec:
                     approvalMessage: |
-                      **Canary 25% Successful**
-                      
-                      Metrics look healthy. Proceed to 50%?
+                      Canary 25pct Successful - Proceed to 50pct?
+                    includePipelineExecutionHistory: true
                     approvers:
                       userGroups:
                         - account._account_all_users
                       minimumCount: 1
+                      disallowPipelineExecutor: false
                   timeout: 2h
               
               # Step 5: Canary Phase 2 - 50%
               - step:
                   type: K8sCanaryDeploy
-                  name: Canary Deploy 50%
+                  name: Canary_Deploy_50pct
                   identifier: canary_50
                   spec:
                     instanceSelection:
@@ -481,7 +469,7 @@ pipeline:
               # Step 6: Verify Canary 50%
               - step:
                   type: ShellScript
-                  name: Verify Canary 50%
+                  name: Verify_Canary_50pct
                   identifier: verify_canary_50
                   spec:
                     shell: Bash
@@ -509,23 +497,23 @@ pipeline:
               # Step 7: Final Approval for 100%
               - step:
                   type: HarnessApproval
-                  name: Approve Full Rollout
+                  name: Approve_Full_Rollout
                   identifier: approve_full_rollout
                   spec:
                     approvalMessage: |
-                      **Canary 50% Successful**
-                      
-                      All metrics healthy. Proceed to full rollout (100%)?
+                      Canary 50pct Successful - Proceed to full rollout?
+                    includePipelineExecutionHistory: true
                     approvers:
                       userGroups:
                         - account._account_all_users
                       minimumCount: 1
+                      disallowPipelineExecutor: false
                   timeout: 2h
               
               # Step 8: Canary Delete (promotes to full deployment)
               - step:
                   type: K8sCanaryDelete
-                  name: Complete Rollout 100%
+                  name: Complete_Rollout_100pct
                   identifier: canary_delete
                   spec: {}
                   timeout: 10m
@@ -604,7 +592,7 @@ pipeline:
     # STAGE 5: Deploy to PROD - Blue/Green (Alternative)
     # ============================================
     - stage:
-        name: Deploy to PROD - Blue Green
+        name: Deploy_to_PROD_BlueGreen
         identifier: deploy_prod_bluegreen
         description: Production deployment with blue-green strategy
         type: Deployment
@@ -638,18 +626,19 @@ pipeline:
               # Production Approval
               - step:
                   type: HarnessApproval
-                  name: Production Deployment Approval
+                  name: Production_Deployment_Approval_BlueGreen
                   identifier: prod_bluegreen_approval
                   spec:
                     approvalMessage: |
-                      **PRODUCTION DEPLOYMENT REQUEST (Blue/Green)**
-                      
+                      PRODUCTION DEPLOYMENT REQUEST (Blue-Green)
                       Build: <+pipeline.sequenceId>
-                      Strategy: Blue/Green deployment
+                      Strategy: Blue-Green deployment
+                    includePipelineExecutionHistory: true
                     approvers:
                       userGroups:
                         - account._account_all_users
                       minimumCount: 1
+                      disallowPipelineExecutor: false
                   timeout: 1d
               
               # Blue/Green Deployment
@@ -694,17 +683,18 @@ pipeline:
               # Approval to Switch Traffic
               - step:
                   type: HarnessApproval
-                  name: Approve Traffic Switch
+                  name: Approve_Traffic_Switch
                   identifier: approve_traffic_switch
                   spec:
                     approvalMessage: |
-                      **Green Environment Ready**
-                      
+                      Green Environment Ready
                       Green environment is healthy. Switch production traffic?
+                    includePipelineExecutionHistory: true
                     approvers:
                       userGroups:
                         - account._account_all_users
                       minimumCount: 1
+                      disallowPipelineExecutor: false
                   timeout: 2h
               
               # Swap (Blue becomes Green, Green becomes Blue)
