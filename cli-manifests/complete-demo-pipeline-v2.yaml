@@ -1,6 +1,6 @@
 pipeline:
-  name: Complete_CICD_Demo_Pipeline_V2
-  identifier: completecicddemopipelinev2
+  name: Complete_CICD_Demo_Pipeline_V4
+  identifier: completecicddemopipelinev4
   projectIdentifier: default_project
   orgIdentifier: default
   tags:
