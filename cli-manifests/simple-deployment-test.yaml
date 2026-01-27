@@ -1,0 +1,523 @@
+pipeline:
+  name: Simple_Deployment_Test
+  identifier: simpledeploymenttest
+  projectIdentifier: default_project
+  orgIdentifier: default
+  tags:
+    test: "true"
+    simple: "true"
+  description: Simple pipeline to test DEV -> QA -> PROD deployment flow with approvals
+  properties:
+    ci:
+      codebase:
+        connectorRef: github_connector
+        repoName: harness-gitops-workshop
+        build: <+input>
+  stages:
+    - stage:
+        name: Build_Docker_Image
+        identifier: build_stage
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build and Push
+                  identifier: build_push
+                  spec:
+                    connectorRef: docker_hub_connector
+                    repo: kannam/podinfo
+                    tags:
+                      - <+pipeline.sequenceId>
+                      - latest
+                    dockerfile: apps/podinfo/Dockerfile
+                    context: apps/podinfo
+                  timeout: 10m
+    - stage:
+        name: Deploy_to_DEV
+        identifier: deploy_dev
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: podinfo_docker
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            connectorRef: docker_hub_connector
+                            imagePath: kannam/podinfo
+                            tag: <+pipeline.sequenceId>
+                  manifests:
+                    - manifest:
+                        identifier: k8s_manifest
+                        type: K8sManifest
+                        spec:
+                          store:
+                            type: Inline
+                            spec:
+                              content: |
+                                apiVersion: v1
+                                kind: Namespace
+                                metadata:
+                                  name: podinfo-dev
+                                ---
+                                apiVersion: apps/v1
+                                kind: Deployment
+                                metadata:
+                                  name: podinfo
+                                  namespace: podinfo-dev
+                                  labels:
+                                    app: podinfo
+                                spec:
+                                  replicas: 2
+                                  selector:
+                                    matchLabels:
+                                      app: podinfo
+                                  template:
+                                    metadata:
+                                      labels:
+                                        app: podinfo
+                                    spec:
+                                      securityContext:
+                                        fsGroup: 2
+                                        runAsGroup: 1000
+                                      containers:
+                                      - name: podinfo
+                                        image: kannam/podinfo:<+pipeline.sequenceId>
+                                        imagePullPolicy: Always
+                                        ports:
+                                        - containerPort: 9898
+                                          protocol: TCP
+                                        securityContext:
+                                          runAsUser: 1000
+                                          runAsNonRoot: true
+                                          allowPrivilegeEscalation: false
+                                        livenessProbe:
+                                          httpGet:
+                                            path: /healthz
+                                            port: 9898
+                                          initialDelaySeconds: 5
+                                          periodSeconds: 10
+                                        readinessProbe:
+                                          httpGet:
+                                            path: /readyz
+                                            port: 9898
+                                          initialDelaySeconds: 5
+                                          periodSeconds: 10
+                                        resources:
+                                          requests:
+                                            memory: "64Mi"
+                                            cpu: "100m"
+                                          limits:
+                                            memory: "128Mi"
+                                            cpu: "200m"
+                                ---
+                                apiVersion: v1
+                                kind: Service
+                                metadata:
+                                  name: podinfo
+                                  namespace: podinfo-dev
+                                  labels:
+                                    app: podinfo
+                                spec:
+                                  type: ClusterIP
+                                  selector:
+                                    app: podinfo
+                                  ports:
+                                  - port: 9898
+                                    targetPort: 9898
+                                    protocol: TCP
+                                    name: http
+          environment:
+            environmentRef: dev_environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: openshift_dev_infra
+          execution:
+            steps:
+              - step:
+                  type: K8sRollingDeploy
+                  name: Deploy to DEV
+                  identifier: rolling_deploy_dev
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+                  timeout: 10m
+              - step:
+                  type: ShellScript
+                  name: Verify DEV Deployment
+                  identifier: verify_dev
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Verifying DEV Deployment ==="
+                          oc wait --for=condition=ready pod -l app=podinfo -n podinfo-dev --timeout=300s || true
+                          oc get pods -n podinfo-dev -l app=podinfo
+                          echo "[OK] DEV deployment verified"
+                  timeout: 5m
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rollback DEV
+                  identifier: rollback_dev
+                  spec: {}
+                  timeout: 10m
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        name: Deploy_to_QA
+        identifier: deploy_qa
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: podinfo_docker
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            connectorRef: docker_hub_connector
+                            imagePath: kannam/podinfo
+                            tag: <+pipeline.sequenceId>
+                  manifests:
+                    - manifest:
+                        identifier: k8s_manifest
+                        type: K8sManifest
+                        spec:
+                          store:
+                            type: Inline
+                            spec:
+                              content: |
+                                apiVersion: v1
+                                kind: Namespace
+                                metadata:
+                                  name: podinfo-qa
+                                ---
+                                apiVersion: apps/v1
+                                kind: Deployment
+                                metadata:
+                                  name: podinfo
+                                  namespace: podinfo-qa
+                                  labels:
+                                    app: podinfo
+                                spec:
+                                  replicas: 2
+                                  selector:
+                                    matchLabels:
+                                      app: podinfo
+                                  template:
+                                    metadata:
+                                      labels:
+                                        app: podinfo
+                                    spec:
+                                      securityContext:
+                                        fsGroup: 2
+                                        runAsGroup: 1000
+                                      containers:
+                                      - name: podinfo
+                                        image: kannam/podinfo:<+pipeline.sequenceId>
+                                        imagePullPolicy: Always
+                                        ports:
+                                        - containerPort: 9898
+                                          protocol: TCP
+                                        securityContext:
+                                          runAsUser: 1000
+                                          runAsNonRoot: true
+                                          allowPrivilegeEscalation: false
+                                        livenessProbe:
+                                          httpGet:
+                                            path: /healthz
+                                            port: 9898
+                                          initialDelaySeconds: 5
+                                          periodSeconds: 10
+                                        readinessProbe:
+                                          httpGet:
+                                            path: /readyz
+                                            port: 9898
+                                          initialDelaySeconds: 5
+                                          periodSeconds: 10
+                                        resources:
+                                          requests:
+                                            memory: "64Mi"
+                                            cpu: "100m"
+                                          limits:
+                                            memory: "128Mi"
+                                            cpu: "200m"
+                                ---
+                                apiVersion: v1
+                                kind: Service
+                                metadata:
+                                  name: podinfo
+                                  namespace: podinfo-qa
+                                  labels:
+                                    app: podinfo
+                                spec:
+                                  type: ClusterIP
+                                  selector:
+                                    app: podinfo
+                                  ports:
+                                  - port: 9898
+                                    targetPort: 9898
+                                    protocol: TCP
+                                    name: http
+          environment:
+            environmentRef: QA_Environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: OpenShift_QA_Infrastructure
+          execution:
+            steps:
+              - step:
+                  type: HarnessApproval
+                  name: QA_Deployment_Approval
+                  identifier: qa_approval
+                  spec:
+                    approvalMessage: |
+                      DEV deployment successful!
+                      Approve deployment to QA?
+                      Build: <+pipeline.sequenceId>
+                      Image: kannam/podinfo:<+pipeline.sequenceId>
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      userGroups:
+                        - account._account_all_users
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                  timeout: 1d
+              - step:
+                  type: K8sRollingDeploy
+                  name: Deploy to QA
+                  identifier: rolling_deploy_qa
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+                  timeout: 10m
+              - step:
+                  type: ShellScript
+                  name: Verify QA Deployment
+                  identifier: verify_qa
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Verifying QA Deployment ==="
+                          oc wait --for=condition=ready pod -l app=podinfo -n podinfo-qa --timeout=300s || true
+                          oc get pods -n podinfo-qa -l app=podinfo
+                          echo "[OK] QA deployment verified"
+                  timeout: 5m
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rollback QA
+                  identifier: rollback_qa
+                  spec: {}
+                  timeout: 10m
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        when:
+          pipelineStatus: Success
+    - stage:
+        name: Deploy_to_PROD
+        identifier: deploy_prod
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: podinfo_docker
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            connectorRef: docker_hub_connector
+                            imagePath: kannam/podinfo
+                            tag: <+pipeline.sequenceId>
+                  manifests:
+                    - manifest:
+                        identifier: k8s_manifest
+                        type: K8sManifest
+                        spec:
+                          store:
+                            type: Inline
+                            spec:
+                              content: |
+                                apiVersion: v1
+                                kind: Namespace
+                                metadata:
+                                  name: podinfo-prod
+                                ---
+                                apiVersion: apps/v1
+                                kind: Deployment
+                                metadata:
+                                  name: podinfo
+                                  namespace: podinfo-prod
+                                  labels:
+                                    app: podinfo
+                                spec:
+                                  replicas: 3
+                                  selector:
+                                    matchLabels:
+                                      app: podinfo
+                                  template:
+                                    metadata:
+                                      labels:
+                                        app: podinfo
+                                    spec:
+                                      securityContext:
+                                        fsGroup: 2
+                                        runAsGroup: 1000
+                                      containers:
+                                      - name: podinfo
+                                        image: kannam/podinfo:<+pipeline.sequenceId>
+                                        imagePullPolicy: Always
+                                        ports:
+                                        - containerPort: 9898
+                                          protocol: TCP
+                                        securityContext:
+                                          runAsUser: 1000
+                                          runAsNonRoot: true
+                                          allowPrivilegeEscalation: false
+                                        livenessProbe:
+                                          httpGet:
+                                            path: /healthz
+                                            port: 9898
+                                          initialDelaySeconds: 5
+                                          periodSeconds: 10
+                                        readinessProbe:
+                                          httpGet:
+                                            path: /readyz
+                                            port: 9898
+                                          initialDelaySeconds: 5
+                                          periodSeconds: 10
+                                        resources:
+                                          requests:
+                                            memory: "128Mi"
+                                            cpu: "200m"
+                                          limits:
+                                            memory: "256Mi"
+                                            cpu: "500m"
+                                ---
+                                apiVersion: v1
+                                kind: Service
+                                metadata:
+                                  name: podinfo
+                                  namespace: podinfo-prod
+                                  labels:
+                                    app: podinfo
+                                spec:
+                                  type: ClusterIP
+                                  selector:
+                                    app: podinfo
+                                  ports:
+                                  - port: 9898
+                                    targetPort: 9898
+                                    protocol: TCP
+                                    name: http
+          environment:
+            environmentRef: Production_Environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: OpenShift_Production_Infrastructure
+          execution:
+            steps:
+              - step:
+                  type: HarnessApproval
+                  name: PROD_Deployment_Approval
+                  identifier: prod_approval
+                  spec:
+                    approvalMessage: |
+                      QA deployment successful!
+                      Approve deployment to PRODUCTION?
+                      Build: <+pipeline.sequenceId>
+                      Image: kannam/podinfo:<+pipeline.sequenceId>
+                      ⚠️ This will deploy to production!
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      userGroups:
+                        - account._account_all_users
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                  timeout: 1d
+              - step:
+                  type: K8sRollingDeploy
+                  name: Deploy to PROD
+                  identifier: rolling_deploy_prod
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+                  timeout: 10m
+              - step:
+                  type: ShellScript
+                  name: Verify PROD Deployment
+                  identifier: verify_prod
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Verifying PRODUCTION Deployment ==="
+                          oc wait --for=condition=ready pod -l app=podinfo -n podinfo-prod --timeout=300s || true
+                          oc get pods -n podinfo-prod -l app=podinfo
+                          echo "[OK] PRODUCTION deployment verified"
+                  timeout: 5m
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rollback PROD
+                  identifier: rollback_prod
+                  spec: {}
+                  timeout: 10m
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        when:
+          pipelineStatus: Success
