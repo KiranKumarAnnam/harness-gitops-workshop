@@ -7,7 +7,7 @@ pipeline:
     demo: "true"
     environment: multi-env
   description: |
-    Complete demo pipeline showcasing:
+    Complete demo pipeline showcasing Test:
     - CI: Build on GitHub commit
     - CD: Auto-deploy to DEV, QA (with approval), PROD (with approval + canary/blue-green)
     - Rollback: Automatic and manual
