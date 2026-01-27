@@ -90,7 +90,7 @@ pipeline:
                   spec:
                     skipDryRun: false
                     pruningEnabled: false
-                  timeout: 10m
+                  timeout: 15m
               - step:
                   type: ShellScript
                   name: Health Check
