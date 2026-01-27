@@ -67,19 +67,15 @@ pipeline:
         spec:
           deploymentType: Kubernetes
           service:
-            serviceRef: podinfo_service
+            serviceRef: test_service
             serviceInputs:
               serviceDefinition:
                 type: Kubernetes
                 spec:
                   artifacts:
                     primary:
-                      primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tagRegex: latest
+                      primaryArtifactRef: <+input>
+                      sources: <+input>
           environment:
             environmentRef: dev_environment
             deployToAll: false
