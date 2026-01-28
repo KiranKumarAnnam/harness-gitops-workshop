@@ -20,7 +20,7 @@ pipeline:
         build:
           type: branch
           spec:
-            branch: <+trigger.branch>
+            branch: demo-fixed-pipeline
   stages:
     - stage:
         name: Build_and_Test
