@@ -195,6 +195,7 @@ pipeline:
                 type: StageRollback
         when:
           pipelineStatus: Success
+        tags: {}
     - stage:
         name: Deploy_to_QA
         identifier: deploy_qa
