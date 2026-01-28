@@ -344,11 +344,6 @@ pipeline:
                   artifacts:
                     primary:
                       primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tagRegex: <+input>
           environment:
             environmentRef: Production_Environment
             deployToAll: false
@@ -602,11 +597,6 @@ pipeline:
                   artifacts:
                     primary:
                       primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tagRegex: <+input>
           environment:
             environmentRef: Production_Environment
             deployToAll: false
