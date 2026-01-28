@@ -17,7 +17,10 @@ pipeline:
       codebase:
         connectorRef: github_connector
         repoName: harness-gitops-workshop
-        build: <+input>
+        build:
+          type: branch
+          spec:
+            branch: <+trigger.branch>
   stages:
     - stage:
         name: Build_and_Test
@@ -86,8 +89,12 @@ pipeline:
                 spec:
                   artifacts:
                     primary:
-                      primaryArtifactRef: <+input>
-                      sources: <+input>
+                      primaryArtifactRef: podinfo_docker
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            tag: <+pipeline.sequenceId>
           environment:
             environmentRef: dev_environment
             deployToAll: false
@@ -213,7 +220,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tagRegex: <+input>
+                            tag: <+pipeline.sequenceId>
           environment:
             environmentRef: QA_Environment
             deployToAll: false
@@ -337,7 +344,6 @@ pipeline:
                 type: StageRollback
         when:
           pipelineStatus: Success
-          condition: <+stage.deploy_dev.status> == "Success"
     - stage:
         name: Deploy_to_PROD_Canary
         identifier: deploy_prod_canary
@@ -595,7 +601,6 @@ pipeline:
                 type: StageRollback
         when:
           pipelineStatus: Success
-          condition: <+stage.deploy_qa.status> == "Success"
     - stage:
         name: Deploy_to_PROD_BlueGreen
         identifier: deploy_prod_bluegreen
@@ -616,7 +621,7 @@ pipeline:
                         - identifier: podinfo_docker
                           type: DockerRegistry
                           spec:
-                            tagRegex: <+input>
+                            tag: <+pipeline.sequenceId>
           environment:
             environmentRef: Production_Environment
             deployToAll: false

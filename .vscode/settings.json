@@ -1,0 +1,50 @@
+{
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/.git/index.lock": true,
+    "**/node_modules/**": true,
+    "**/apps/**": true,
+    "**/terraform/**": true,
+    "**/configs/**": true,
+    "**/templates/**": true
+  },
+  "search.exclude": {
+    "**/.git": true,
+    "**/node_modules": true,
+    "**/vendor": true,
+    "**/.terraform": true,
+    "**/apps/podinfo/**": true,
+    "**/terraform/**": true,
+    "**/templates/**": true
+  },
+  "files.exclude": {
+    "**/.git": false,
+    "**/apps/podinfo/pkg": true,
+    "**/apps/podinfo/test": true,
+    "**/apps/podinfo/deploy": true,
+    "**/apps/podinfo/timoni": true,
+    "**/apps/podinfo/otel": true,
+    "**/apps/podinfo/cmd": true
+  },
+  "git.enabled": true,
+  "git.autorefresh": false,
+  "git.decorations.enabled": false,
+  "git.enableSmartCommit": false,
+  "git.ignoreLimitWarning": true,
+  "git.untrackedChanges": "hidden",
+  "files.autoSave": "off",
+  "extensions.autoUpdate": false,
+  "typescript.tsserver.maxTsServerMemory": 2048,
+  "files.watcherInclude": {
+    "**/*.yaml": true,
+    "**/*.yml": true,
+    "**/*.md": true
+  },
+  "editor.foldingStrategy": "indentation",
+  "editor.quickSuggestions": {
+    "other": false,
+    "comments": false,
+    "strings": false
+  }
+}
