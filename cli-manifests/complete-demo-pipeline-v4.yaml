@@ -337,7 +337,7 @@ pipeline:
                 type: StageRollback
         when:
           pipelineStatus: Success
-          condition: <+stage.deploy_dev.status> == Success
+          condition: <+stage.deploy_dev.status> == "Success"
     - stage:
         name: Deploy_to_PROD_Canary
         identifier: deploy_prod_canary
@@ -595,7 +595,7 @@ pipeline:
                 type: StageRollback
         when:
           pipelineStatus: Success
-          condition: <+stage.deploy_qa.status> == Success
+          condition: <+stage.deploy_qa.status> == "Success"
     - stage:
         name: Deploy_to_PROD_BlueGreen
         identifier: deploy_prod_bluegreen
@@ -733,7 +733,7 @@ pipeline:
                 type: StageRollback
         when:
           pipelineStatus: Success
-          condition: <+pipeline.variables.deploymentStrategy> == bluegreen
+          condition: <+pipeline.variables.deploymentStrategy> == "bluegreen"
   variables:
     - name: dockerRepo
       type: String
