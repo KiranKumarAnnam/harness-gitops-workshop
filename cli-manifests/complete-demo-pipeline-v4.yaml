@@ -201,7 +201,7 @@ pipeline:
         spec:
           deploymentType: Kubernetes
           service:
-            serviceRef: podinfo_service
+            serviceRef: test_service
             serviceInputs:
               serviceDefinition:
                 type: Kubernetes
@@ -346,7 +346,7 @@ pipeline:
         spec:
           deploymentType: Kubernetes
           service:
-            serviceRef: podinfo_service
+            serviceRef: test_service
             serviceInputs:
               serviceDefinition:
                 type: Kubernetes
@@ -604,7 +604,7 @@ pipeline:
         spec:
           deploymentType: Kubernetes
           service:
-            serviceRef: podinfo_service
+            serviceRef: test_service
             serviceInputs:
               serviceDefinition:
                 type: Kubernetes
