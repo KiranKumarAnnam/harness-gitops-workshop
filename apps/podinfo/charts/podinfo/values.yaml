@@ -98,8 +98,16 @@ serviceAccount:
   # List of image pull secrets if pulling from private registries
   imagePullSecrets: []
 
-# set container security context
-securityContext: {}
+# set pod-level security context
+podSecurityContext:
+  fsGroup: 2
+  runAsGroup: 1000
+
+# set container security context (empty to allow pipeline overrides)
+securityContext:
+  runAsUser: 1000
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
 
 ingress:
   enabled: false
