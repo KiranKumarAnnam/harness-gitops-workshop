@@ -828,3 +828,4 @@ pipeline:
             - account._account_all_users
           recipients:
             - <+pipeline.triggeredBy.email>
+  allowStageExecutions: true
