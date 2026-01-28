@@ -90,11 +90,6 @@ pipeline:
                   artifacts:
                     primary:
                       primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tag: <+pipeline.sequenceId>
           environment:
             environmentRef: dev_environment
             deployToAll: false
@@ -216,11 +211,6 @@ pipeline:
                   artifacts:
                     primary:
                       primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tag: <+pipeline.sequenceId>
           environment:
             environmentRef: QA_Environment
             deployToAll: false
@@ -360,11 +350,6 @@ pipeline:
                   artifacts:
                     primary:
                       primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tagRegex: <+input>
           environment:
             environmentRef: Production_Environment
             deployToAll: false
@@ -617,11 +602,6 @@ pipeline:
                   artifacts:
                     primary:
                       primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tag: <+pipeline.sequenceId>
           environment:
             environmentRef: Production_Environment
             deployToAll: false
