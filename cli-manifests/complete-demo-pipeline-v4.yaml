@@ -193,6 +193,7 @@ pipeline:
                 type: StageRollback
         when:
           pipelineStatus: Success
+        tags: {}
     - stage:
         name: Deploy_to_QA
         identifier: deploy_qa
@@ -200,20 +201,6 @@ pipeline:
         type: Deployment
         spec:
           deploymentType: Kubernetes
-          service:
-            serviceRef: test_service
-            serviceInputs:
-              serviceDefinition:
-                type: Kubernetes
-                spec:
-                  artifacts:
-                    primary:
-                      primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tagRegex: <+input>
           environment:
             environmentRef: QA_Environment
             deployToAll: false
@@ -329,6 +316,9 @@ pipeline:
                           echo "Execution: <+pipeline.executionId>"
                           echo "Build: <+pipeline.sequenceId>"
                           echo "QA deployment failed and rolled back"
+          service:
+            useFromStage:
+              stage: deploy_dev
         failureStrategies:
           - onFailure:
               errors:
@@ -337,7 +327,7 @@ pipeline:
                 type: StageRollback
         when:
           pipelineStatus: Success
-          condition: <+stage.deploy_dev.status> == "Success"
+        tags: {}
     - stage:
         name: Deploy_to_PROD_Canary
         identifier: deploy_prod_canary
