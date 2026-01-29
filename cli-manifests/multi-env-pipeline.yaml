@@ -153,28 +153,31 @@ pipeline:
 
                           echo "Deployment verified successfully!"
                   timeout: 5m
-            rollbackSteps:
-              - step:
-                  type: K8sRollingRollback
-                  name: Rollback on Failure
-                  identifier: rollback
-                  spec:
-                    pruningEnabled: false
-                  timeout: 10m
-              - step:
-                  type: ShellScript
-                  name: Notify Rollback
-                  identifier: notify_rollback
-                  spec:
-                    shell: Bash
-                    onDelegate: true
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          echo "=== AUTOMATIC ROLLBACK TRIGGERED ==="
-                          echo "Deployment failed validation"
-                          echo "Application rolled back to previous version"
+          # Ensure the secret 'docker-hub-secret' exists in the 'podinfo-dev' namespace
+          imagePullSecrets:
+            - name: docker-hub-secret
+          rollbackSteps:
+            - step:
+                type: K8sRollingRollback
+                name: Rollback on Failure
+                identifier: rollback
+                spec:
+                  pruningEnabled: false
+                timeout: 10m
+            - step:
+                type: ShellScript
+                name: Notify Rollback
+                identifier: notify_rollback
+                spec:
+                  shell: Bash
+                  onDelegate: true
+                  source:
+                    type: Inline
+                    spec:
+                      script: |
+                        echo "=== AUTOMATIC ROLLBACK TRIGGERED ==="
+                        echo "Deployment failed validation"
+                        echo "Application rolled back to previous version"
         failureStrategies:
           - onFailure:
               errors:
@@ -277,28 +280,31 @@ pipeline:
 
                           echo "Deployment verified successfully!"
                   timeout: 5m
-            rollbackSteps:
-              - step:
-                  type: K8sRollingRollback
-                  name: Rollback on Failure
-                  identifier: rollback
-                  spec:
-                    pruningEnabled: false
-                  timeout: 10m
-              - step:
-                  type: ShellScript
-                  name: Notify Rollback
-                  identifier: notify_rollback
-                  spec:
-                    shell: Bash
-                    onDelegate: true
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          echo "=== AUTOMATIC ROLLBACK TRIGGERED ==="
-                          echo "Deployment failed validation"
-                          echo "Application rolled back to previous version"
+          # Ensure the secret 'docker-hub-secret' exists in the 'podinfo-qa' namespace
+          imagePullSecrets:
+            - name: docker-hub-secret
+          rollbackSteps:
+            - step:
+                type: K8sRollingRollback
+                name: Rollback on Failure
+                identifier: rollback
+                spec:
+                  pruningEnabled: false
+                timeout: 10m
+            - step:
+                type: ShellScript
+                name: Notify Rollback
+                identifier: notify_rollback
+                spec:
+                  shell: Bash
+                  onDelegate: true
+                  source:
+                    type: Inline
+                    spec:
+                      script: |
+                        echo "=== AUTOMATIC ROLLBACK TRIGGERED ==="
+                        echo "Deployment failed validation"
+                        echo "Application rolled back to previous version"
         failureStrategies:
           - onFailure:
               errors:
@@ -401,28 +407,31 @@ pipeline:
 
                           echo "Deployment verified successfully!"
                   timeout: 5m
-            rollbackSteps:
-              - step:
-                  type: K8sRollingRollback
-                  name: Rollback on Failure
-                  identifier: rollback
-                  spec:
-                    pruningEnabled: false
-                  timeout: 10m
-              - step:
-                  type: ShellScript
-                  name: Notify Rollback
-                  identifier: notify_rollback
-                  spec:
-                    shell: Bash
-                    onDelegate: true
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          echo "=== AUTOMATIC ROLLBACK TRIGGERED ==="
-                          echo "Deployment failed validation"
-                          echo "Application rolled back to previous version"
+          # Ensure the secret 'docker-hub-secret' exists in the 'podinfo-prod' namespace
+          imagePullSecrets:
+            - name: docker-hub-secret
+          rollbackSteps:
+            - step:
+                type: K8sRollingRollback
+                name: Rollback on Failure
+                identifier: rollback
+                spec:
+                  pruningEnabled: false
+                timeout: 10m
+            - step:
+                type: ShellScript
+                name: Notify Rollback
+                identifier: notify_rollback
+                spec:
+                  shell: Bash
+                  onDelegate: true
+                  source:
+                    type: Inline
+                    spec:
+                      script: |
+                        echo "=== AUTOMATIC ROLLBACK TRIGGERED ==="
+                        echo "Deployment failed validation"
+                        echo "Application rolled back to previous version"
         failureStrategies:
           - onFailure:
               errors:
