@@ -60,130 +60,6 @@ pipeline:
             type: String
             value: <+pipeline.executionStartTime>
     - stage:
-        name: Deploy to OpenShift QA
-        identifier: deploy_qa
-        description: Deploy to OpenShift QA with health checks
-        type: Deployment
-        spec:
-          deploymentType: Kubernetes
-          service:
-            serviceRef: podinfo_service
-            serviceInputs:
-              serviceDefinition:
-                type: Kubernetes
-                spec:
-                  artifacts:
-                    primary:
-                      primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tagRegex: latest
-          environment:
-            environmentRef: QA_Environment
-            deployToAll: false
-            infrastructureDefinitions:
-              - identifier: OpenShift_QA_Infrastructure
-          execution:
-            steps:
-              - step:
-                  type: K8sRollingDeploy
-                  name: Rolling Deployment
-                  identifier: rolling_deploy
-                  spec:
-                    skipDryRun: false
-                    pruningEnabled: false
-                  timeout: 10m
-              - step:
-                  type: ShellScript
-                  name: Health Check
-                  identifier: health_check
-                  spec:
-                    shell: Bash
-                    onDelegate: true
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          #!/bin/bash
-                          set -e
-
-                          echo "Running health checks..."
-
-                          # Wait for pods to be ready
-                          oc wait --for=condition=ready pod -l app=podinfo -n podinfo-qa --timeout=300s
-
-                          # Get pod count
-                          POD_COUNT=$(oc get pods -n podinfo-qa -l app=podinfo --field-selector=status.phase=Running --no-headers | wc -l)
-                          echo "Running pods: $POD_COUNT"
-
-                          if [ "$POD_COUNT" -lt 1 ]; then
-                            echo "ERROR: No running pods found"
-                            exit 1
-                          fi
-
-                          echo "Health check passed!"
-                    environmentVariables: []
-                    outputVariables: []
-                  timeout: 5m
-              - step:
-                  type: ShellScript
-                  name: Verify Deployment
-                  identifier: verify_deployment
-                  spec:
-                    shell: Bash
-                    onDelegate: true
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          #!/bin/bash
-                          echo "Verifying deployment..."
-
-                          # Check deployment status
-                          oc rollout status deployment/podinfo -n podinfo-qa --timeout=5m
-
-                          # Get deployment info
-                          oc get deployment podinfo -n podinfo-qa
-
-                          # Get route info
-                          ROUTE=$(oc get route podinfo -n podinfo-qa -o jsonpath='{.spec.host}' 2>/dev/null || echo "No route found")
-                          echo "Application route: $ROUTE"
-
-                          echo "Deployment verified successfully!"
-                  timeout: 5m
-            rollbackSteps:
-              - step:
-                  type: K8sRollingRollback
-                  name: Rollback on Failure
-                  identifier: rollback
-                  spec:
-                    pruningEnabled: false
-                  timeout: 10m
-              - step:
-                  type: ShellScript
-                  name: Notify Rollback
-                  identifier: notify_rollback
-                  spec:
-                    shell: Bash
-                    onDelegate: true
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          echo "=== AUTOMATIC ROLLBACK TRIGGERED ==="
-                          echo "Deployment failed validation"
-                          echo "Application rolled back to previous version"
-        failureStrategies:
-          - onFailure:
-              errors:
-                - AllErrors
-              action:
-                type: StageRollback
-        when:
-          pipelineStatus: Success
-    - stage:
         name: Deploy to OpenShift Dev
         identifier: deploy_dev
         description: Deploy to OpenShift with health checks
@@ -273,6 +149,130 @@ pipeline:
 
                           # Get route info
                           ROUTE=$(oc get route podinfo -n podinfo-dev -o jsonpath='{.spec.host}' 2>/dev/null || echo "No route found")
+                          echo "Application route: $ROUTE"
+
+                          echo "Deployment verified successfully!"
+                  timeout: 5m
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rollback on Failure
+                  identifier: rollback
+                  spec:
+                    pruningEnabled: false
+                  timeout: 10m
+              - step:
+                  type: ShellScript
+                  name: Notify Rollback
+                  identifier: notify_rollback
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== AUTOMATIC ROLLBACK TRIGGERED ==="
+                          echo "Deployment failed validation"
+                          echo "Application rolled back to previous version"
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        when:
+          pipelineStatus: Success
+    - stage:
+        name: Deploy to OpenShift QA
+        identifier: deploy_qa
+        description: Deploy to OpenShift QA with health checks
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: podinfo_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: podinfo_docker
+                      sources:
+                        - identifier: podinfo_docker
+                          type: DockerRegistry
+                          spec:
+                            tagRegex: latest
+          environment:
+            environmentRef: QA_Environment
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: OpenShift_QA_Infrastructure
+          execution:
+            steps:
+              - step:
+                  type: K8sRollingDeploy
+                  name: Rolling Deployment
+                  identifier: rolling_deploy
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+                  timeout: 10m
+              - step:
+                  type: ShellScript
+                  name: Health Check
+                  identifier: health_check
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+
+                          echo "Running health checks..."
+
+                          # Wait for pods to be ready
+                          oc wait --for=condition=ready pod -l app=podinfo -n podinfo-qa --timeout=300s
+
+                          # Get pod count
+                          POD_COUNT=$(oc get pods -n podinfo-qa -l app=podinfo --field-selector=status.phase=Running --no-headers | wc -l)
+                          echo "Running pods: $POD_COUNT"
+
+                          if [ "$POD_COUNT" -lt 1 ]; then
+                            echo "ERROR: No running pods found"
+                            exit 1
+                          fi
+
+                          echo "Health check passed!"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 5m
+              - step:
+                  type: ShellScript
+                  name: Verify Deployment
+                  identifier: verify_deployment
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          echo "Verifying deployment..."
+
+                          # Check deployment status
+                          oc rollout status deployment/podinfo -n podinfo-qa --timeout=5m
+
+                          # Get deployment info
+                          oc get deployment podinfo -n podinfo-qa
+
+                          # Get route info
+                          ROUTE=$(oc get route podinfo -n podinfo-qa -o jsonpath='{.spec.host}' 2>/dev/null || echo "No route found")
                           echo "Application route: $ROUTE"
 
                           echo "Deployment verified successfully!"
