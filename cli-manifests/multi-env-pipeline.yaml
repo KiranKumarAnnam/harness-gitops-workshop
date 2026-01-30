@@ -75,11 +75,6 @@ pipeline:
                   artifacts:
                     primary:
                       primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tagRegex: latest
           environment:
             environmentRef: dev_environment
             deployToAll: false
@@ -153,7 +148,6 @@ pipeline:
 
                           echo "Deployment verified successfully!"
                   timeout: 5m
-          # Ensure the secret 'docker-hub-secret' exists in the 'podinfo-dev' namespace
           imagePullSecrets:
             - name: docker-hub-secret
           rollbackSteps:
@@ -202,11 +196,6 @@ pipeline:
                   artifacts:
                     primary:
                       primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tagRegex: latest
           environment:
             environmentRef: QA_Environment
             deployToAll: false
@@ -280,7 +269,6 @@ pipeline:
 
                           echo "Deployment verified successfully!"
                   timeout: 5m
-          # Ensure the secret 'docker-hub-secret' exists in the 'podinfo-qa' namespace
           imagePullSecrets:
             - name: docker-hub-secret
           rollbackSteps:
@@ -329,11 +317,6 @@ pipeline:
                   artifacts:
                     primary:
                       primaryArtifactRef: podinfo_docker
-                      sources:
-                        - identifier: podinfo_docker
-                          type: DockerRegistry
-                          spec:
-                            tagRegex: latest
           environment:
             environmentRef: Production_Environment
             deployToAll: false
@@ -407,7 +390,6 @@ pipeline:
 
                           echo "Deployment verified successfully!"
                   timeout: 5m
-          # Ensure the secret 'docker-hub-secret' exists in the 'podinfo-prod' namespace
           imagePullSecrets:
             - name: docker-hub-secret
           rollbackSteps:
