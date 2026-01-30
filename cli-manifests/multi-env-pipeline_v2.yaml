@@ -1,6 +1,6 @@
 pipeline:
   name: demo-ci-cd-pipeline
-  identifier: democicdpipeline
+  identifier: multienvpipeline
   projectIdentifier: default_project
   orgIdentifier: default
   tags: {}
