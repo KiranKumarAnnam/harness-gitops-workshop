@@ -81,10 +81,10 @@ pipeline:
                           spec:
                             tagRegex: latest
           environment:
-            environmentRef: qa_environment
+            environmentRef: QA_Environment
             deployToAll: false
             infrastructureDefinitions:
-              - identifier: openshift_qa_infra
+              - identifier: OpenShift_QA_Infrastructure
           execution:
             steps:
               - step:
@@ -175,14 +175,14 @@ pipeline:
                           echo "=== AUTOMATIC ROLLBACK TRIGGERED ==="
                           echo "Deployment failed validation"
                           echo "Application rolled back to previous version"
-          failureStrategies:
-            - onFailure:
-                errors:
-                  - AllErrors
-                action:
-                  type: StageRollback
-          when:
-            pipelineStatus: Success
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        when:
+          pipelineStatus: Success
     - stage:
         name: Deploy to OpenShift Dev
         identifier: deploy_dev
