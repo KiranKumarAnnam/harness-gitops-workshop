@@ -1,5 +1,5 @@
 pipeline:
-  name: demo-ci-cd-pipeline
+  name: multi-env-ci-cd-pipeline
   identifier: multienvpipeline
   projectIdentifier: default_project
   orgIdentifier: default
