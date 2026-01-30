@@ -17,7 +17,10 @@ pipeline:
       codebase:
         connectorRef: github_connector
         repoName: harness-gitops-workshop
-        build: <+input>
+        build:
+          type: branch
+          spec:
+            branch: demo-fixed-pipeline
   stages:
     - stage:
         name: Build_and_Test
@@ -86,8 +89,7 @@ pipeline:
                 spec:
                   artifacts:
                     primary:
-                      primaryArtifactRef: <+input>
-                      sources: <+input>
+                      primaryArtifactRef: podinfo_docker
           environment:
             environmentRef: dev_environment
             deployToAll: false
@@ -201,6 +203,18 @@ pipeline:
         type: Deployment
         spec:
           deploymentType: Kubernetes
+<<<<<<< HEAD
+=======
+          service:
+            serviceRef: test_service
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: podinfo_docker
+>>>>>>> demo-fixed-pipeline
           environment:
             environmentRef: QA_Environment
             deployToAll: false
@@ -327,7 +341,10 @@ pipeline:
                 type: StageRollback
         when:
           pipelineStatus: Success
+<<<<<<< HEAD
         tags: {}
+=======
+>>>>>>> demo-fixed-pipeline
     - stage:
         name: Deploy_to_PROD_Canary
         identifier: deploy_prod_canary
@@ -580,7 +597,6 @@ pipeline:
                 type: StageRollback
         when:
           pipelineStatus: Success
-          condition: <+stage.deploy_qa.status> == "Success"
     - stage:
         name: Deploy_to_PROD_BlueGreen
         identifier: deploy_prod_bluegreen
